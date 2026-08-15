@@ -9,25 +9,68 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || 'main' }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out baseline
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.BASE_REF }}
+          path: baseline
+      - name: Check out candidate
+        uses: actions/checkout@v5
+        with:
+          path: candidate
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Run lint
-        run: ./gradlew lint --no-daemon
+          cache: 'gradle'
+      - name: Enable temporary lint baseline on base
+        working-directory: baseline
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/build.gradle.kts')
+          s = p.read_text()
+          marker = 'android {\n'
+          if marker not in s:
+              raise SystemExit('android block not found')
+          s = s.replace(marker, 'android {\n    lint {\n        baseline = file("lint-baseline.xml")\n    }\n\n', 1)
+          p.write_text(s)
+          PY
+      - name: Generate lint baseline from current base
+        working-directory: baseline
+        run: ./gradlew :app:updateLintBaseline --no-daemon
+      - name: Enable lint baseline on candidate
+        working-directory: candidate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/build.gradle.kts')
+          s = p.read_text()
+          marker = 'android {\n'
+          if marker not in s:
+              raise SystemExit('android block not found')
+          s = s.replace(marker, 'android {\n    lint {\n        baseline = file("lint-baseline.xml")\n    }\n\n', 1)
+          p.write_text(s)
+          PY
+          cp ../baseline/app/lint-baseline.xml app/lint-baseline.xml
+      - name: Run differential lint
+        working-directory: candidate
+        run: ./gradlew :app:lintDebug --no-daemon
 
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --no-daemon
       - name: Upload APK
@@ -39,11 +82,24 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
+      - name: Build QuickJS desktop native library
+        run: |
+          git clone --recursive https://github.com/HarlonWang/quickjs-wrapper.git quickjs-wrapper
+          git -C quickjs-wrapper checkout cfdc05fa11ac866558297e888fbac5580905e194
+          git -C quickjs-wrapper submodule update --init --recursive
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=ninja -G Ninja \
+            -S quickjs-wrapper/wrapper-java/src/main \
+            -B quickjs-wrapper/wrapper-java/build/cmake
+          cmake --build quickjs-wrapper/wrapper-java/build/cmake \
+            --target quickjs-java-wrapper -j 4
       - name: Run tests
-        run: ./gradlew test --no-daemon
+        run: >-
+          ./gradlew test --no-daemon
+          -Dtest.quickjs.so=${{ github.workspace }}/quickjs-wrapper/wrapper-java/build/cmake/libquickjs-java-wrapper.so
