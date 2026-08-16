@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="cpz_app_name">CPZ Media Hub</string>
     <string name="car_hub_title">CPZ Media Hub</string>
     <string name="car_hub_installed">Installed on phone</string>
     <string name="car_hub_not_installed">Not installed on phone</string>
