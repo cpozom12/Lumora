@@ -27,6 +27,7 @@ jobs:
     needs: validate-wrapper
     runs-on: ubuntu-latest
     env:
+      # Differential lint always compares against the pull request's actual base branch.
       BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || 'main' }}
     steps:
       - name: Check out baseline
