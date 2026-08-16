@@ -33,6 +33,17 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="video/*" />
         </intent>
+
+        <!-- Reviewed CPZ Media Hub handoff targets. Package visibility is explicit rather than
+             broad QUERY_ALL_PACKAGES access. -->
+        <package android:name="pe.movistar.go" />
+        <package android:name="com.netflix.mediaclient" />
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.amazon.avod.thirdpartyclient" />
+        <package android:name="com.wbd.stream" />
+
+        <!-- Optional external local-media players retained from upstream. -->
         <package android:name="org.videolan.vlc" />
         <package android:name="com.mxtech.videoplayer.pro" />
         <package android:name="com.mxtech.videoplayer.ad" />
