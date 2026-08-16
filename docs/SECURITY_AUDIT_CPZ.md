@@ -1,12 +1,13 @@
 # CPZ Lumora Security Audit
 
-Status: **HARDENING IN PROGRESS — do not install the upstream-equivalent debug APK**
+Status: **HARDENING IN PROGRESS — install only after the current branch, CI and rebuilt APK pass the trust gate below**
 
 Audit target:
 - Fork: `cpozom12/Lumora`
 - Upstream executable baseline: `c0aaf9bd798052ad51e33d703ecffd3ef022eef6`
 - First audited build commit: `3bf17c2bd6557ed91376dfcc655551f180638fb7`
 - First APK SHA-256: `85a3025bc8bf3fc8961055382def17b02060ef80c17dad7670717dfb784729ac`
+- Hardened install identity: `com.cpozom.lumora` (`com.cpozom.lumora.debug` for debug builds)
 
 ## Provenance verified
 
@@ -18,127 +19,155 @@ APK Signature Scheme v2 was parsed and cryptographically verified:
 - signature algorithm: RSA PKCS#1 v1.5 + SHA-256 (`0x0103`)
 - APK content digest matched the signed digest.
 
-The first build differs from the upstream baseline only by CPZ documentation, therefore all executable findings below apply to the upstream code at that baseline.
+The first build differed from the upstream baseline only by CPZ documentation, therefore the original findings below apply to the upstream code at that baseline. The hardened branch intentionally removes or disables the risky paths before CPZ installation.
 
 ## No classic spyware indicators found
 
-Static inspection has not found app code requesting SMS, contacts, microphone, camera, Accessibility Service, device-admin, notification-listener or usage-stats privileges. No source references to `Runtime.exec`, `ProcessBuilder` or `DexClassLoader` were found. No Google Mobile Ads, Facebook Ads, Firebase Analytics/Crashlytics, Sentry, AppsFlyer, Adjust, OneSignal or Mixpanel SDK package was identified in the APK.
+Static inspection has not found app code requesting SMS, contacts, microphone, camera, Accessibility Service, device-admin, notification-listener or usage-stats privileges. No source references to `Runtime.exec`, `ProcessBuilder` or `DexClassLoader` were found. No Google Mobile Ads, Facebook Ads, Firebase Analytics/Crashlytics, Sentry, AppsFlyer, Adjust, OneSignal or Mixpanel SDK package was identified in the audited upstream-equivalent APK.
 
-This is evidence against conventional spyware behavior, **not a proof that the original APK is safe**.
+This is evidence against conventional spyware behavior, **not proof that arbitrary upstream releases are safe**.
 
-## Security blockers discovered
+## Security findings and hardening status
 
-### S-01 — Upstream self-update supply-chain path — BLOCKER
+### S-01 — Upstream self-update supply-chain path — MITIGATED
 
-The upstream app can check `disclosurez/Lumora` releases, download an APK, request the Android install-packages capability and launch the installer. A future upstream account/release compromise would bypass CPZ code review and signing controls.
+The upstream app could check `disclosurez/Lumora` releases, download an APK, request Android's install-packages capability and launch the installer. A future upstream account/release compromise could therefore bypass CPZ review and signing controls.
 
-Hardening status: **MITIGATED on `agent/security-hardening`**.
-- `REQUEST_INSTALL_PACKAGES` removed.
-- APK installer query removed.
-- update checker made fail-closed/no-network.
+Hardened state:
+- `REQUEST_INSTALL_PACKAGES` removed;
+- update checker performs no network I/O and returns no update;
+- APK installer facade fails closed;
+- inherited release workflow removed pending a CPZ-owned signing pipeline.
 
-### S-02 — Network-supplied JavaScript evaluated in Rhino — BLOCKER
+### S-02 — Network-supplied JavaScript evaluated in Rhino — REMOVED
 
-`MStreamDayExtractor` downloaded obfuscated JavaScript and could fall back to `AADecoder.decodeWithRhino()`. The evaluator initialized a standard Rhino scope and evaluated the remote script in-process. That is an unacceptable code-execution boundary for an untrusted streaming host.
+The inherited MStreamDay path could evaluate network-supplied obfuscated JavaScript through Rhino.
 
-Hardening status: **REMOVED**.
-- MStreamDay extractor now fails closed.
-- `AADecoder.java` deleted.
-- Rhino dependency deleted.
+Hardened state:
+- MStreamDay path fails closed;
+- `AADecoder.java` removed;
+- Rhino dependency removed.
 
-### S-03 — TLS certificate/hostname verification bypasses — BLOCKER
+### S-03 — TLS certificate/hostname verification bypasses — CORE MITIGATED
 
-The inherited network stack contained trust-all X509 trust managers and hostname verifiers. DoH itself also used disabled certificate/hostname verification. Several inherited providers expose `buildUnsafe()` fallbacks.
+The inherited stack contained trust-all certificate and hostname behavior, including DoH paths.
 
-Hardening status: **CORE PATH MITIGATED / LEGACY SCRAPERS QUARANTINED**.
-- DoH now uses normal platform TLS and HTTPS-only endpoints.
-- shared `NetworkClient.trustAll` is now a safe compatibility alias to the validating client.
-- header-level network logging removed from the shared client.
-- all inherited third-party scraper providers are runtime-disabled pending individual review.
+Hardened state:
+- DoH uses normal platform TLS and HTTPS-only resolvers;
+- shared `NetworkClient.trustAll` is a compatibility alias to the validating client;
+- shared request/header logging that could expose credentials was removed;
+- inherited third-party scraper providers are runtime-disabled.
 
-Remaining task: delete or rewrite legacy provider-specific `buildUnsafe()` implementations before any scraper is re-enabled.
+Remaining cleanup: physically delete or individually rewrite legacy provider-specific unsafe compatibility code before any scraper provider is ever re-enabled.
 
-### S-04 — Remote JavaScript plugin trust — HIGH
+### S-04 — Remote JavaScript plugin trust — DISABLED IN TRUSTED BUILD
 
-The upstream app automatically exposed a plugin catalogue hosted by the upstream project and could install JavaScript fetched from the network. QuickJS host APIs permit outbound GET/POST requests. The sandbox does not visibly expose filesystem/shell/Android Context, which is positive, but unsigned remote executable code is not acceptable as an implicit default.
+The upstream app could discover, download and execute JavaScript plugins from network stores.
 
-Hardening status: **MITIGATED BY DEFAULT**.
-- no plugin store is configured on a clean install;
-- stores are explicit opt-in and HTTPS-only;
-- newly installed scripts remain disabled until separately enabled.
+Hardened state:
+- QuickJS dependency/native payload removed;
+- plugin execution API is a fail-closed compatibility facade;
+- plugin store list is empty and cannot fetch/install scripts;
+- no remote executable plugin path is part of the trusted build.
 
-Future task: add signed/hash-pinned plugin manifests if plugins remain in the product.
+Future reintroduction, if ever desired, requires a separate signed/hash-pinned plugin trust design.
 
-### S-05 — Excessive scraper attack surface — HIGH
+### S-05 — Excessive scraper attack surface — QUARANTINED
 
-The upstream product includes dozens of independently changing third-party streaming/scraper providers, WebView challenge handling, extractor code, cookies and site-specific parsing. This is unrelated to the trusted IPTV/Jellyfin/Plex/Android Auto core CPZ wants to build.
+The inherited product includes many independently changing scraper/provider implementations, WebView challenge handling, cookies and site-specific parsing.
 
-Hardening status: **QUARANTINED**.
-- `Provider.providers` is empty in the hardened branch.
+Hardened state:
+- inherited third-party providers are not exposed by the trusted runtime;
+- R8/minification is enabled for security-audit debug builds so unreachable legacy code is stripped from the produced APK.
 
-Future task: physically remove the scraper package and its now-unneeded dependencies after compatibility cleanup.
+Remaining cleanup: physically remove scraper source/dependencies once compatibility call sites are untangled.
 
-### S-06 — Plaintext provider/media credentials and backup exposure — HIGH
+### S-06 — Plaintext provider/media credentials and backup exposure — MITIGATED
 
-IPTV usernames/passwords and Jellyfin/Plex credentials/tokens are stored in app-private preferences. Upstream Android Auto Backup was enabled. Manual JSON backups also include provider credential fields.
+Upstream persisted provider/media-server connection details and tokens in plaintext preferences and exported credential-bearing manual backups.
 
-Hardening status: **PARTIAL**.
-- Android application backup is disabled in the hardened manifest.
+Hardened state:
+- IPTV URLs/usernames/passwords/user-agent values are stored as AndroidKeyStore-backed AES-GCM envelopes;
+- Jellyfin/Plex connection details and tokens use the same authenticated encryption path;
+- legacy plaintext values are accepted only for one-time migration and immediately rewritten encrypted;
+- Android application backup is disabled;
+- plaintext manual backup/import is disabled pending a future authenticated, passphrase-protected design.
 
-Remaining tasks:
-- migrate secrets to Android Keystore-backed AES-GCM storage;
-- remove secrets from normal manual backups or add password-protected authenticated encryption.
+### S-07 — Cleartext LAN QR credential pairing — MITIGATED
 
-### S-07 — Cleartext LAN QR pairing — MEDIUM/HIGH
+The inherited quick-pair server accepted provider credentials over cleartext LAN HTTP.
 
-QR pairing starts a local HTTP server and can receive provider credentials over cleartext LAN traffic. It has a random 128-bit token and a five-minute lifetime, which are good controls, but those controls do not provide transport confidentiality.
+Hardened state:
+- credential-bearing LAN pairing server is disabled and opens no listener;
+- generic QR generation remains available only for non-secret strings/URLs.
 
-Hardening status: **OPEN**.
+### S-08 — Permissive WebView scraper configuration — RUNTIME QUARANTINED
 
-Do not use credential-bearing QR pairing on untrusted Wi-Fi until the feature is redesigned or disabled.
+Inherited scraper flows contain permissive WebView/challenge behavior. Those providers remain disabled in the trusted runtime and are not considered an approved product surface.
 
-### S-08 — Permissive WebView scraper configuration — MEDIUM/HIGH
+### S-09 — Native torrent/P2P stack — MITIGATED
 
-The inherited Cloudflare resolver enables JavaScript, third-party cookies and mixed content. One extractor exposes a narrow JavaScript interface. These are substantial web attack surfaces even though no generic Android bridge was found.
+The inherited APK bundled libtorrent/native P2P and a local HTTP streaming server.
 
-Hardening status: **RUNTIME QUARANTINED with the scraper providers**.
+Hardened state:
+- libtorrent4j/native P2P dependencies removed;
+- NanoHTTPD removed;
+- torrent foreground service removed from the manifest;
+- TorrentEngine is a fail-closed compatibility stub.
 
-### S-09 — Native torrent engine / unnecessary native attack surface — MEDIUM
+Remaining cleanup: delete compatibility source once UI/call-site cleanup is complete.
 
-The APK includes QuickJS JNI plus a large `libtorrent4j` native library and P2P engine. Torrent playback is not required for the intended trusted media-client core.
+### S-10 — CI/release supply chain — PARTIALLY MITIGATED
 
-Hardening status: **OPEN**.
+Hardened state:
+- GitHub Actions used by CI are pinned to immutable commit SHAs;
+- Gradle wrapper validation runs before build/test/lint;
+- CI permissions are read-only;
+- debug APK is built in CI;
+- `tools/security_gate.py` enforces source invariants and scans the built APK for forbidden native/runtime payloads;
+- Dependabot monitors Gradle and GitHub Actions dependencies;
+- inherited automatic release/signing workflow is removed.
 
-Future task: remove torrent/NanoHTTPD/libtorrent unless there is a deliberate product requirement.
+Remaining release work:
+- generate a CPZ-owned release signing key outside Git;
+- configure a minimal CPZ-controlled release workflow after the application id/product identity is frozen;
+- record the final release signer fingerprint and exact APK SHA-256.
 
-### S-10 — CI/release supply-chain hardening — MEDIUM
+### S-11 — Global cleartext compatibility — OPEN / PRODUCT DECISION
 
-Actions currently use floating major-version action tags and the release workflow uses third-party signing/release actions. That is common practice but not sufficient for a high-trust release pipeline.
+The manifest still permits cleartext traffic because IPTV/M3U/Stalker ecosystems can include user-supplied `http://` endpoints. This does not itself transmit data, but it allows a configured provider to use an unencrypted transport and therefore exposes provider credentials/content to local-network interception.
 
-Hardening status: **OPEN**.
+Before a production release we must choose one explicit policy:
+1. HTTPS-only trusted build; or
+2. insecure HTTP allowed only behind an explicit per-provider/user opt-in with a visible warning.
 
-Future task: pin Actions to immutable commit SHAs, enable dependency/security scanning, and create a CPZ-controlled release signing key.
+Do not silently treat cleartext provider credentials as secure.
 
-## Native APK inventory
+## Automated regression gate
 
-The audited upstream-equivalent APK contains 19 DEX files and these native libraries:
-- `libquickjs-android-wrapper.so`
-- `libtorrent4j.so`
-
-No additional hidden native payload was found in the APK archive. The native components correspond to dependencies declared by the Gradle build, but native-code provenance and CVE review remain part of the release gate.
+`tools/security_gate.py` runs in CI and is intended to make security hardening a ratchet rather than a one-time audit. It currently fails if, among other things:
+- the CPZ application id changes unexpectedly;
+- install-packages capability returns;
+- Rhino/QuickJS/libtorrent/NanoHTTPD/Java-WebSocket dependencies return;
+- updater/plugin/torrent/LAN-pairing fail-closed facades are re-enabled;
+- Android backup is enabled;
+- provider/media secrets stop using `SecureValueStore`;
+- unsafe hostname-verifier behavior returns to the shared network client;
+- forbidden native/runtime markers appear in the produced APK.
 
 ## Trust gate before installing on a primary phone
 
-A CPZ APK is not approved for installation until all of the following are true:
+A CPZ APK is approved for installation only when all of the following are true:
 1. build comes from `agent/security-hardening` or a reviewed descendant;
-2. `build`, unit tests and regression-aware lint pass;
-3. exact APK hash and signer fingerprint are recorded;
-4. no self-update/install-package capability exists;
-5. Rhino/network-code execution path is absent;
-6. trust-all TLS paths are not reachable;
-7. scraper providers are disabled or individually reviewed;
-8. fresh-install plugin list is empty and scripts are disabled by default;
-9. merged APK manifest is re-audited;
-10. APK/Dex/native static scan is repeated on the new artifact.
+2. `validate-wrapper`, `build`, unit tests, regression-aware lint and `security-gate` pass;
+3. exact APK SHA-256 and signer fingerprint are recorded;
+4. application id is the CPZ-owned id;
+5. no self-update/install-package capability exists;
+6. Rhino/remote-plugin/P2P native execution paths are absent from the produced APK;
+7. trust-all TLS paths are not reachable;
+8. scraper providers remain disabled or are individually reviewed;
+9. credential-bearing LAN pairing and plaintext backups remain disabled;
+10. merged APK manifest and DEX/native inventory are re-audited;
+11. cleartext-provider policy is explicitly accepted/configured for the intended release.
 
 Only after those gates pass should the APK be installed on the primary Android device.
