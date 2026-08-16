@@ -18,7 +18,9 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.lumora"
+        // CPZ-owned install identity. Keep the Kotlin namespace unchanged for now so the
+        // security migration stays small and reviewable; namespace can be renamed later.
+        applicationId = "com.cpozom.lumora"
         minSdk = 25
         targetSdk = 36
         versionCode = 30
