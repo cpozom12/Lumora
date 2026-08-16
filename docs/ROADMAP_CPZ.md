@@ -53,7 +53,33 @@ Remaining work:
 - Physically remove quarantined legacy scraper/torrent/plugin compatibility source after functional validation.
 - Add further security scanning where useful without weakening reproducibility.
 
-## M3 — In-car stationary UX
+## M3 — Media-hub provider architecture
+
+Goal: make the product a provider-neutral media hub rather than an IPTV-centric application.
+
+Architecture source of truth:
+- `docs/MEDIA_HUB_ARCHITECTURE.md`
+
+Required provider families:
+- IPTV / live TV
+- Jellyfin and Plex-style personal media
+- Netflix as a first-class commercial streaming target
+- Disney+ as a first-class commercial streaming target
+- extensible support for Prime Video, Max, YouTube, Apple TV+, Paramount+, Crunchyroll and other legitimate services where a supported integration path exists
+
+Integration policy:
+- Native playback only where the app has a legitimate protocol/API and authorized media/DRM flow.
+- Netflix and Disney+ initially target official-app handoff/deep-link integration; they may move to native/partner integration only through a documented/authorized provider path.
+- Never scrape credentials, reuse private provider tokens, bypass DRM, or make undocumented private APIs a production dependency.
+
+Planned work:
+- Introduce provider capability abstractions without changing inherited playback behavior.
+- Implement a provider registry and external-provider launcher.
+- Add Netflix and Disney+ provider cards/launch paths as baseline commercial integrations.
+- Add additional commercial providers through the same abstraction.
+- Evaluate official partner/SDK paths separately for each commercial provider.
+
+## M4 — In-car stationary UX
 
 Goal: optimize the product for short parked sessions and large-touch-target interaction.
 
@@ -63,15 +89,17 @@ Planned work:
 - Improve resume/continue-watching workflow.
 - Device/head-unit compatibility matrix.
 - Keep platform parked-only restrictions intact.
+- Keep provider logic independent from the car presentation layer.
 
-## M4 — Media expansion
+## M5 — Media expansion
 
 Goal: broaden legitimate media sources while keeping the playback core maintainable.
 
 Planned work:
 - Harden IPTV/Jellyfin/Plex source handling already present upstream.
-- Improve offline media workflow.
-- Evaluate supported integrations/deep links for commercial streaming services.
+- Improve offline media workflow where provider rights permit it.
+- Expand the commercial provider registry beyond Netflix and Disney+.
+- Evaluate documented/authorized native integrations provider by provider.
 - Do not bypass DRM, authentication, subscription controls, or Android Auto motion restrictions.
 
 ## Engineering rules
@@ -83,3 +111,4 @@ Planned work:
 - Upstream changes are reviewed before integration; never blindly sync executable code.
 - No secrets, provider credentials, keystores, signing passwords, or API tokens in Git.
 - Android Auto parked-only restrictions are never bypassed.
+- Commercial providers must use documented/authorized integration paths; external launch is preferred over brittle WebView/private-API emulation.
