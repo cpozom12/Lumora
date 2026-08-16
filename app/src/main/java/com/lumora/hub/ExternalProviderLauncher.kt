@@ -1,5 +1,6 @@
 package com.lumora.hub
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 
@@ -36,10 +37,12 @@ class ExternalProviderLauncher(private val context: Context) {
         return try {
             context.startActivity(launchIntent)
             ExternalLaunchResult.Launched
-        } catch (t: Throwable) {
+        } catch (e: SecurityException) {
             // Background-activity and car-host policy differs by Android/host version. Fail closed
-            // and surface the result to the user instead of trying undocumented bypasses.
-            ExternalLaunchResult.Blocked(t.message)
+            // rather than attempting an undocumented bypass.
+            ExternalLaunchResult.Blocked(e.message)
+        } catch (e: ActivityNotFoundException) {
+            ExternalLaunchResult.NotInstalled
         }
     }
 }
