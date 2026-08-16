@@ -8,49 +8,31 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
- * Tracks which plugin stores are configured (the default one plus any the user added) and can
- * fetch a store's catalog / download one of its scripts. Doesn't touch script storage itself -
- * installing a fetched script goes through [PluginScriptManager.installScript].
+ * Manages explicitly configured JavaScript plugin stores.
  *
- * Catalog schema (a small static JSON file, e.g. `scripts/index.json` in a plugin repo):
- * ```json
- * {
- *   "name": "Lumora Plugins",
- *   "scripts": [
- *     {
- *       "id": "anime.senshi",
- *       "label": "Anime (Senshi)",
- *       "description": "...",
- *       "capabilities": ["stream_search"],
- *       "file": "anime-senshi.js"
- *     }
- *   ]
- * }
- * ```
- * `file` may be a bare filename (resolved relative to the catalog URL's own directory - the
- * common case, since a store is usually just this JSON file sitting next to its scripts) or an
- * absolute `http(s)://` URL.
+ * CPZ hardening rule: no third-party plugin store is trusted or contacted by default. A clean
+ * installation therefore has an empty store list and cannot silently inherit executable code
+ * from the upstream project's GitHub account. Stores are opt-in and HTTPS-only.
  */
 class PluginStoreManager(
     private val prefs: SharedPreferences,
     private val httpClient: OkHttpClient = OkHttpClient(),
 ) {
-    fun storeUrls(): List<PluginStore> {
-        val custom = customStoreUrls()
-        val stores = mutableListOf(PluginStore(url = DEFAULT_STORE_URL, name = "Lumora Plugins", removable = false))
-        custom.filterNot { it == DEFAULT_STORE_URL }.forEach { stores.add(PluginStore(url = it, name = null, removable = true)) }
-        return stores
-    }
+    fun storeUrls(): List<PluginStore> =
+        customStoreUrls()
+            .filter { isAllowedStoreUrl(it) }
+            .sorted()
+            .map { PluginStore(url = it, name = null, removable = true) }
 
     fun addStore(url: String) {
-        if (url == DEFAULT_STORE_URL) return
+        val normalized = url.trim()
+        if (!isAllowedStoreUrl(normalized)) return
         val current = customStoreUrls().toMutableSet()
-        current.add(url)
+        current.add(normalized)
         prefs.edit().putStringSet(PREF_STORE_URLS, current).apply()
     }
 
     fun removeStore(url: String) {
-        if (url == DEFAULT_STORE_URL) return
         val current = customStoreUrls().toMutableSet()
         current.remove(url)
         prefs.edit().putStringSet(PREF_STORE_URLS, current).apply()
@@ -58,17 +40,9 @@ class PluginStoreManager(
 
     private fun customStoreUrls(): Set<String> = prefs.getStringSet(PREF_STORE_URLS, emptySet()) ?: emptySet()
 
-    /**
-     * Fetches and parses a store's catalog. Never throws - failures come back as [Result.failure].
-     *
-     * Uses Gson rather than `org.json` deliberately: `org.json` classes resolve to the Android
-     * SDK's unmocked stub jar on a desktop JVM (throws `RuntimeException: ... not mocked` outside
-     * Robolectric), so parsing logic built on it can't run under this project's plain JVM unit
-     * tests. Gson is a real, pure-Java library (already a project dependency) with identical
-     * behavior on-device and under test.
-     */
     suspend fun fetchCatalog(storeUrl: String): Result<List<StoreScript>> = withContext(Dispatchers.IO) {
         runCatching {
+            require(isAllowedStoreUrl(storeUrl)) { "Plugin stores must use HTTPS" }
             val body = fetchText(storeUrl) ?: error("Couldn't reach that store")
             val json = JsonParser.parseString(body).asJsonObject
             val scriptsArray = json.getAsJsonArray("scripts")
@@ -82,13 +56,15 @@ class PluginStoreManager(
                     ?.mapNotNull { it.asString?.takeIf(String::isNotBlank) }
                     ?.toSet()
                     .orEmpty()
+                val fileUrl = if (file.startsWith("https://")) file else baseUrl + file
+                if (!isAllowedStoreUrl(fileUrl)) return@forEach
                 result.add(
                     StoreScript(
                         id = id,
                         label = item.optString("label")?.takeIf { it.isNotBlank() } ?: id,
                         description = item.optString("description")?.takeIf { it.isNotBlank() },
                         capabilities = capabilities,
-                        fileUrl = if (file.startsWith("http://") || file.startsWith("https://")) file else baseUrl + file,
+                        fileUrl = fileUrl,
                     )
                 )
             }
@@ -96,8 +72,8 @@ class PluginStoreManager(
         }
     }
 
-    /** The store's self-declared name, if its catalog has been fetched successfully. */
     suspend fun fetchStoreName(storeUrl: String): String? = withContext(Dispatchers.IO) {
+        if (!isAllowedStoreUrl(storeUrl)) return@withContext null
         runCatching {
             val body = fetchText(storeUrl) ?: return@withContext null
             JsonParser.parseString(body).asJsonObject.optString("name")?.takeIf { it.isNotBlank() }
@@ -107,19 +83,25 @@ class PluginStoreManager(
     private fun com.google.gson.JsonObject.optString(key: String): String? =
         get(key)?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asString
 
-    suspend fun fetchScriptText(fileUrl: String): String? = withContext(Dispatchers.IO) { fetchText(fileUrl) }
+    suspend fun fetchScriptText(fileUrl: String): String? = withContext(Dispatchers.IO) {
+        if (isAllowedStoreUrl(fileUrl)) fetchText(fileUrl) else null
+    }
 
     private fun fetchText(url: String): String? = try {
+        if (!isAllowedStoreUrl(url)) return null
         val request = Request.Builder().url(url).build()
         httpClient.newCall(request).execute().use { response ->
             if (response.isSuccessful) response.body?.string() else null
         }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 
+    private fun isAllowedStoreUrl(url: String): Boolean = url.trim().startsWith("https://")
+
     companion object {
         private const val PREF_STORE_URLS = "plugin_store_urls"
+        /** Upstream store retained only as a label/reference; it is NOT auto-enabled. */
         const val DEFAULT_STORE_URL = "https://raw.githubusercontent.com/disclosurez/Lumora-Plugins/master/scripts/index.json"
     }
 }
