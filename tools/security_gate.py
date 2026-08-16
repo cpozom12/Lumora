@@ -28,40 +28,34 @@ EXPECTED_MEDIA_PACKAGES = (
 # code may still exist temporarily while the upstream UI is untangled, but none of it is allowed
 # to survive R8 into the CPZ trusted APK.
 FORBIDDEN_SCRAPER_MARKERS = (
-    b'aniworld.to',
-    b'anime-world.in',
-    b'dood.pm',
-    b'dood.re',
-    b'doodstream.com',
-    b'mixdrop.top',
-    b'mixdrop.ag',
-    b'megacloud.blog',
-    b'serienstream.to',
-    b'cineby.app',
-    b'streamingcommunityz.land',
-    b'vixsrc.to',
-    b'supervideo.tv',
-    b'filemoon.sx',
-    b'videasy.net',
-    b'vidsrc.cc',
-    b'vidsrc-embed.ru',
-    b'vidsrc-embed.su',
-    b'vidfast.pro',
-    b'2embed.cc',
-    b'vidlink.pro',
-    b'videostr.net',
-    b'4khdhub.fans',
-    b'101kittens.com',
-    b'hydrax.net',
-    b'yourupload.com',
-    b'waaw.to',
-    b'wishonly.site',
-    b'savefiles.com',
-    b'luluvid.com',
-    b'moviesapi.club',
-    b'streamtape.com',
-    b'vidmoly.me',
+    b'aniworld.to', b'anime-world.in', b'dood.pm', b'dood.re', b'doodstream.com',
+    b'mixdrop.top', b'mixdrop.ag', b'megacloud.blog', b'serienstream.to', b'cineby.app',
+    b'streamingcommunityz.land', b'vixsrc.to', b'supervideo.tv', b'filemoon.sx',
+    b'videasy.net', b'vidsrc.cc', b'vidsrc-embed.ru', b'vidsrc-embed.su', b'vidfast.pro',
+    b'2embed.cc', b'vidlink.pro', b'videostr.net', b'4khdhub.fans', b'101kittens.com',
+    b'hydrax.net', b'yourupload.com', b'waaw.to', b'wishonly.site', b'savefiles.com',
+    b'luluvid.com', b'moviesapi.club', b'streamtape.com', b'vidmoly.me',
     b'disclosurez/lumora-plugins',
+)
+
+FORBIDDEN_HUB_PERMISSIONS = (
+    'android.permission.REQUEST_INSTALL_PACKAGES',
+    'android.permission.QUERY_ALL_PACKAGES',
+    'android.permission.ACCESS_FINE_LOCATION',
+    'android.permission.ACCESS_COARSE_LOCATION',
+    'android.permission.CAMERA',
+    'android.permission.RECORD_AUDIO',
+    'android.permission.READ_CONTACTS',
+    'android.permission.WRITE_CONTACTS',
+    'android.permission.READ_SMS',
+    'android.permission.SEND_SMS',
+    'android.permission.READ_EXTERNAL_STORAGE',
+    'android.permission.WRITE_EXTERNAL_STORAGE',
+    'android.permission.RECEIVE_BOOT_COMPLETED',
+    'android.permission.POST_NOTIFICATIONS',
+    'android.permission.FOREGROUND_SERVICE',
+    'android.permission.ACCESS_WIFI_STATE',
+    'android.permission.CHANGE_WIFI_MULTICAST_STATE',
 )
 
 
@@ -102,24 +96,23 @@ def check_source() -> None:
     require(f'applicationId = "{EXPECTED_APPLICATION_ID}"' in gradle,
             f'applicationId must remain {EXPECTED_APPLICATION_ID}')
 
-    for banned in (
-        'org.mozilla:rhino',
-        'libtorrent',
-        'nanohttpd',
-        'java-websocket',
-        'quickjs',
-    ):
+    for banned in ('org.mozilla:rhino', 'libtorrent', 'nanohttpd', 'java-websocket', 'quickjs'):
         require(banned.lower() not in deps.lower(),
                 f'forbidden dependency marker present: {banned}')
 
-    require('android.permission.REQUEST_INSTALL_PACKAGES' not in manifest,
-            'REQUEST_INSTALL_PACKAGES must not be declared')
-    require('android.permission.QUERY_ALL_PACKAGES' not in manifest,
-            'QUERY_ALL_PACKAGES must not be declared')
+    for permission in FORBIDDEN_HUB_PERMISSIONS:
+        require(permission not in manifest,
+                f'forbidden personal-Hub permission declared: {permission}')
     require('android:allowBackup="false"' in manifest,
             'Android backup must remain disabled')
+    require('android:usesCleartextTraffic="false"' in manifest,
+            'personal Hub must reject cleartext HTTP traffic')
     require('.torrent.TorrentForegroundService' not in manifest,
             'torrent foreground service must not be registered')
+    require('.reminder.ReminderBootReceiver' not in manifest,
+            'boot receiver must not be registered in personal Hub V1')
+    require('.recording.RecordingRestoreReceiver' not in manifest,
+            'recording boot receiver must not be registered in personal Hub V1')
 
     require('suspend fun checkForUpdate(): UpdateInfo? = null' in updater,
             'in-app updater must remain fail-closed')
