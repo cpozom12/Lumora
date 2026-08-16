@@ -29,6 +29,23 @@ The current `android:appCategory="game"` marker may remain temporarily in the pe
 
 The experimental build must still preserve Android Auto's parked-only lifecycle. No code may defeat, neutralize or work around the platform behavior that exits/blocks parked apps when vehicle motion is detected.
 
+### Driving transition policy
+
+The personal build should preserve playback continuity without preserving moving-video output.
+
+User preference:
+- `On motion: continue audio` (recommended/default)
+- `On motion: pause playback`
+
+State behavior:
+- parked: full authorized video/audio playback;
+- motion detected: hide/stop the video surface and either continue audio or pause according to the user preference;
+- preserve content id, provider, playback position, queue and session state;
+- parked again: restore the video surface and offer fast resume from the preserved position;
+- navigation/voice/audio controls may remain available only through platform-supported surfaces.
+
+This preference controls CPZ playback behavior only. It is not a switch for bypassing Android Auto's parked-app lifecycle, vehicle-motion enforcement or driver-distraction restrictions.
+
 ### Future public build
 
 A later public version must use a platform-supported category and distribution path appropriate to its actual functionality. If Android Auto gains generally available video/media-hub support, the public build can migrate to it. Until then, public compliance work is intentionally separate from the personal experimental APK.
@@ -117,6 +134,7 @@ Keep provider and presentation concerns separate:
 - `ProviderAdapter`: provider-specific authentication/catalog behavior for Tier A/C
 - `ExternalProviderLauncher`: Tier B launch/deep-link handling with strict package/link allowlists
 - `PlaybackCore`: Media3/ExoPlayer only for authorized native sources
+- `DrivingTransitionController`: preserves session state and applies the configured audio-only/pause behavior when motion is detected without bypassing platform restrictions
 - `CarPresentation`: parked-safe presentation layer; no provider credentials or DRM logic
 
 The UI should consume capabilities rather than contain provider-specific branching wherever possible.
@@ -134,9 +152,11 @@ The UI should consume capabilities rather than contain provider-specific branchi
 
 1. Stabilize and validate the hardened inherited app.
 2. Produce the personal experimental CPZ APK and validate Android Auto parked-mode presence/lifecycle on the target hardware.
-3. Introduce provider capability abstractions without changing existing playback behavior.
-4. Add Netflix and Disney+ provider tiles/official-app handoff as baseline commercial-streaming integrations where the platform allows it.
-5. Add additional commercial providers through the same Tier B abstraction.
-6. Evaluate each provider for a legitimate Tier C path; promote only when an official integration is available.
-7. Optimize phone/TV/parked-car surfaces without duplicating provider logic.
-8. Only after the personal product is stable, design the separate public/compliant distribution profile.
+3. Harden and configure IPTV playback, provider credentials and cleartext policy.
+4. Implement the driving transition controller: full playback when parked, configurable audio-only/pause behavior on motion, fast video resume when parked again.
+5. Introduce provider capability abstractions without changing existing playback behavior.
+6. Add Netflix and Disney+ provider tiles/official-app handoff as baseline commercial-streaming integrations where the platform allows it.
+7. Add additional commercial providers through the same Tier B abstraction.
+8. Evaluate each provider for a legitimate Tier C path; promote only when an official integration is available.
+9. Optimize phone/TV/parked-car surfaces without duplicating provider logic.
+10. Only after the personal product is stable, design the separate public/compliant distribution profile.
