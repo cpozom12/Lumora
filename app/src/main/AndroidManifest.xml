@@ -12,41 +12,23 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- WorkManager may use its own foreground service for user-visible long-running work. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- Cast -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- No location permission: the upstream manifest declared FINE_LOCATION for Cast but no
+         app source requested/used it. The CPZ trusted build does not expose location capability. -->
 
-    <!-- Android Auto (auto/LumoraCarAppService.kt). NAVIGATION_TEMPLATES + ACCESS_SURFACE are
-         what the Car App Library requires to draw a navigation template and be handed its
-         drawing surface - the surface the player renders video into, there being no video app
-         category on Android Auto. CAR_SPEED backs the parked-only gate; it is optional at
-         runtime, and the gate falls back to the user's setting when the host won't report. -->
+    <!-- Android Auto Car App Library surface permissions. -->
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
 
-
-    <!-- Self-update: AppUpdateInstaller hands the downloaded APK to the system installer
-         via ACTION_VIEW. Without this permission the install is refused outright; without
-         the <queries> declaration below, targetSdk 36's package-visibility rules mean the
-         implicit ACTION_VIEW intent can't even resolve the installer activity, so
-         startActivity() silently finds nothing to launch. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- No REQUEST_INSTALL_PACKAGES permission. Updates are externally reviewed artifacts. -->
 
     <queries>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:mimeType="application/vnd.android.package-archive" />
-        </intent>
-        <!-- External playback (player/ExternalPlayer.kt): without this, package visibility on
-             API 30+ hides every installed video player, so the resolve comes back empty and
-             the app would report "no player installed" on a device with VLC on it. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="video/*" />
@@ -58,13 +40,10 @@
         <package android:name="is.xyz.mpv" />
     </queries>
 
-    <!-- largeHeap: merged catalogues run to six figures of Channel objects across several
-         providers, all resident so browsing and search stay instant. A TV stick's default heap
-         caps around 170MB, which one large Stalker portal was enough on its own to exhaust. -->
     <application
         android:name=".BaseApplication"
-        android:allowBackup="true"
-        android:fullBackupContent="@xml/backup_rules"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:banner="@mipmap/banner_tv"
         android:icon="@mipmap/ic_launcher"
@@ -90,17 +69,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.CAR_LAUNCHER" />
             </intent-filter>
-            <!-- Android TV's launcher, in its own filter so the car-facing one above stays
-                 identical to a known-listed car app's. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- APK downloaded by AppUpdateInstaller lives in public Downloads; this is what
-             lets the system package installer read it via a content:// URI on API 24+
-             instead of a raw file:// path, which is blocked since Android N. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -111,7 +85,6 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Reminder receivers -->
         <receiver android:name=".reminder.ReminderAlarmReceiver" android:exported="false" />
         <receiver android:name=".reminder.ReminderBootReceiver" android:exported="false">
             <intent-filter>
@@ -119,7 +92,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Recording receivers -->
         <receiver android:name=".recording.RecordingAlarmReceiver" android:exported="false" />
         <receiver android:name=".recording.RecordingRestoreReceiver" android:exported="false">
             <intent-filter>
@@ -127,24 +99,8 @@
             </intent-filter>
         </receiver>
 
-        <!-- Foreground-notification holder for TorrentEngine streams (see com.lumora.torrent). -->
-        <service
-            android:name=".torrent.TorrentForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
+        <!-- No torrent foreground service in the CPZ trusted build. -->
 
-        <!-- No MediaBrowserService is declared, and no class implements one. Advertising one
-             is what made Android Auto file Lumora as a media app - listed, but audio-only,
-             with the car service never bound. The undeclared implementation that used to sit
-             in auto/ was unreachable code and is gone; a future Assistant/Wear integration
-             would need its own service anyway. -->
-
-        <!-- Android Auto. minCarApiLevel and the POI service below are the entire car
-             registration - deliberately no com.google.android.gms.car.application descriptor,
-             which is how a *media* app announces itself and got Lumora listed as audio-only.
-             POI rather than NAVIGATION: this host lists sideloaded POI apps and not navigation
-             ones, and POI is handed the same drawing surface, which is all the video path
-             needs (see auto/CarPlayerScreen.kt). -->
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
@@ -160,19 +116,10 @@
             </intent-filter>
         </service>
 
-        <!-- No TV Input Framework service. Lumora advertised one, but nothing ever wrote a
-             row into TvContract.Channels, so the system input selector had an empty Lumora
-             input that could never be tuned - and the session's tune lookup read the Room
-             `channels` table, which only the (equally unscheduled) catalog sync worker ever
-             filled. Both sides were stubs, so the input is gone rather than left advertising
-             a source that cannot play. -->
-
-        <!-- Cast -->
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.lumora.player.CastOptionsProvider" />
 
-        <!-- WorkManager initializer -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

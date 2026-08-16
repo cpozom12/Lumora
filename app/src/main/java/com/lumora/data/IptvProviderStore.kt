@@ -2,24 +2,34 @@ package com.lumora.data
 
 import android.content.SharedPreferences
 import com.lumora.model.IptvProviderConfig
+import com.lumora.security.SecureValueStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-/** Persists the list of configured IPTV providers as a single JSON array pref - simplest
- *  storage that supports an arbitrary number of entries without a database, and this app
- *  already depends on org.json (JellyfinProvider) so no new dependency either. */
+/**
+ * Persists IPTV provider metadata while keeping connection details encrypted with an
+ * AndroidKeyStore-backed AES-GCM key.
+ *
+ * Upstream stored URLs, usernames and passwords directly in the JSON preference. load() accepts
+ * that legacy representation once, then immediately rewrites it using encrypted envelopes.
+ */
 object IptvProviderStore {
     private const val KEY = "iptv_providers_json"
     private const val LEGACY_ENABLED_KEY = "iptv_provider_enabled"
+    private val SECRET_KEYS = setOf("url", "username", "password", "userAgent")
 
     fun load(prefs: SharedPreferences): List<IptvProviderConfig> {
         val raw = prefs.getString(KEY, null)
         if (raw == null) return migrateLegacy(prefs)
         return try {
             val arr = JSONArray(raw)
-            (0 until arr.length()).map { i -> fromJson(arr.getJSONObject(i)) }
-        } catch (e: Exception) {
+            val configs = (0 until arr.length()).map { i -> fromJson(arr.getJSONObject(i)) }
+            if (containsLegacyPlaintextSecrets(arr)) save(prefs, configs)
+            configs
+        } catch (_: Exception) {
+            // Fail closed. In particular, never overwrite encrypted data if the Android Keystore
+            // key is unavailable or an AES-GCM authentication tag does not verify.
             emptyList()
         }
     }
@@ -27,6 +37,8 @@ object IptvProviderStore {
     fun save(prefs: SharedPreferences, list: List<IptvProviderConfig>) {
         val arr = JSONArray()
         list.forEach { arr.put(toJson(it)) }
+        // Encryption happens before the preference editor is created. If Keystore encryption
+        // fails, the old persisted value remains untouched and plaintext is never written.
         prefs.edit().putString(KEY, arr.toString()).apply()
     }
 
@@ -50,9 +62,6 @@ object IptvProviderStore {
         return current
     }
 
-    /** Flips one per-provider content-type gate (live/movies/series) for one provider,
-     *  mirroring setEnabled - loads, updates the matching entry, saves, returns the new
-     *  list. Pass null to leave a flag untouched. */
     fun setContentFlags(
         prefs: SharedPreferences,
         id: String,
@@ -74,42 +83,42 @@ object IptvProviderStore {
 
     fun newId(): String = UUID.randomUUID().toString()
 
-    /** One-time upgrade from the old single-provider pref scheme (provider_type, plus
-     *  xtream_/stalker_/m3u_ prefixed keys) into a one-entry list - runs once, then the
-     *  list pref takes over so this never runs again (an empty JSON array `[]` from then
-     *  on is a real "no providers configured" state, not "not migrated yet"). */
     private fun migrateLegacy(prefs: SharedPreferences): List<IptvProviderConfig> {
-        val type = prefs.getString("provider_type", null) ?: return emptyList() // no legacy data to migrate
+        val type = prefs.getString("provider_type", null) ?: return emptyList()
         val enabled = prefs.getBoolean(LEGACY_ENABLED_KEY, true)
         val config = when (type) {
             "xtream" -> {
                 val url = prefs.getString("xtream_url", null)
                 if (url.isNullOrBlank()) null else IptvProviderConfig(
-                    id = newId(), type = "xtream", name = prefs.getString("provider_name", "Xtream") ?: "Xtream",
-                    enabled = enabled, url = url, username = prefs.getString("xtream_user", null), password = prefs.getString("xtream_pass", null)
+                    id = newId(), type = "xtream",
+                    name = prefs.getString("provider_name", "Xtream") ?: "Xtream",
+                    enabled = enabled, url = url,
+                    username = prefs.getString("xtream_user", null),
+                    password = prefs.getString("xtream_pass", null)
                 )
             }
             "stalker" -> {
                 val url = prefs.getString("stalker_url", null)
                 if (url.isNullOrBlank()) null else IptvProviderConfig(
-                    id = newId(), type = "stalker", name = prefs.getString("provider_name", "Stalker") ?: "Stalker",
-                    enabled = enabled, url = url, userAgent = prefs.getString("stalker_mac", null)
+                    id = newId(), type = "stalker",
+                    name = prefs.getString("provider_name", "Stalker") ?: "Stalker",
+                    enabled = enabled, url = url,
+                    userAgent = prefs.getString("stalker_mac", null)
                 )
             }
             "m3u" -> {
                 val url = prefs.getString("m3u_url", null)
                 if (url.isNullOrBlank()) null else IptvProviderConfig(
-                    id = newId(), type = "m3u", name = prefs.getString("provider_name", "M3U") ?: "M3U",
-                    enabled = enabled, url = url, userAgent = prefs.getString("user_agent", null)
+                    id = newId(), type = "m3u",
+                    name = prefs.getString("provider_name", "M3U") ?: "M3U",
+                    enabled = enabled, url = url,
+                    userAgent = prefs.getString("user_agent", null)
                 )
             }
             else -> null
         }
         val migrated = listOfNotNull(config)
-        if (migrated.isNotEmpty()) {
-            save(prefs, migrated)
-        }
-        // Clear legacy keys so this doesn't re-run
+        if (migrated.isNotEmpty()) save(prefs, migrated)
         prefs.edit().remove("provider_type").remove(LEGACY_ENABLED_KEY)
             .remove("xtream_url").remove("xtream_user").remove("xtream_pass")
             .remove("stalker_url").remove("stalker_mac")
@@ -126,15 +135,17 @@ object IptvProviderStore {
         put("liveEnabled", c.liveEnabled)
         put("moviesEnabled", c.moviesEnabled)
         put("seriesEnabled", c.seriesEnabled)
-        c.url?.let { put("url", it) }
-        c.username?.let { put("username", it) }
-        c.password?.let { put("password", it) }
-        c.userAgent?.let { put("userAgent", it) }
+        putSecret("url", c.url)
+        putSecret("username", c.username)
+        putSecret("password", c.password)
+        putSecret("userAgent", c.userAgent)
+    }
+
+    private fun JSONObject.putSecret(key: String, value: String?) {
+        value?.takeIf { it.isNotEmpty() }?.let { put(key, SecureValueStore.encrypt(it)) }
     }
 
     private fun fromJson(o: JSONObject): IptvProviderConfig {
-        // Legacy migration: configs saved before the per-type split carry disableVod
-        // (movies+series off together). Newer entries have the individual flags.
         val legacyVodOff = o.optBoolean("disableVod", false)
         fun flag(key: String) = if (o.has(key)) o.optBoolean(key, true) else !legacyVodOff
         return IptvProviderConfig(
@@ -145,10 +156,27 @@ object IptvProviderStore {
             liveEnabled = o.optBoolean("liveEnabled", true),
             moviesEnabled = flag("moviesEnabled"),
             seriesEnabled = flag("seriesEnabled"),
-            url = o.optString("url").takeIf { it.isNotBlank() },
-            username = o.optString("username").takeIf { it.isNotBlank() },
-            password = o.optString("password").takeIf { it.isNotBlank() },
-            userAgent = o.optString("userAgent").takeIf { it.isNotBlank() }
+            url = readSecret(o, "url"),
+            username = readSecret(o, "username"),
+            password = readSecret(o, "password"),
+            userAgent = readSecret(o, "userAgent")
         )
     }
+
+    private fun readSecret(o: JSONObject, key: String): String? {
+        val raw = o.optString(key).takeIf { it.isNotBlank() } ?: return null
+        val decoded = SecureValueStore.decrypt(raw)
+        if (SecureValueStore.isEncrypted(raw) && decoded == null) {
+            throw SecurityException("Could not authenticate encrypted IPTV secret: $key")
+        }
+        return decoded
+    }
+
+    private fun containsLegacyPlaintextSecrets(arr: JSONArray): Boolean =
+        (0 until arr.length()).any { i ->
+            val o = arr.optJSONObject(i) ?: return@any false
+            SECRET_KEYS.any { key ->
+                o.optString(key).takeIf { it.isNotBlank() }?.let { !SecureValueStore.isEncrypted(it) } ?: false
+            }
+        }
 }
