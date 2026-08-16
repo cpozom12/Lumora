@@ -115,17 +115,5 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
           cache: 'gradle'
-      - name: Build QuickJS desktop native library
-        run: |
-          git clone --recursive https://github.com/HarlonWang/quickjs-wrapper.git quickjs-wrapper
-          git -C quickjs-wrapper checkout cfdc05fa11ac866558297e888fbac5580905e194
-          git -C quickjs-wrapper submodule update --init --recursive
-          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=ninja -G Ninja \
-            -S quickjs-wrapper/wrapper-java/src/main \
-            -B quickjs-wrapper/wrapper-java/build/cmake
-          cmake --build quickjs-wrapper/wrapper-java/build/cmake \
-            --target quickjs-java-wrapper -j 4
       - name: Run tests
-        run: >-
-          ./gradlew test --no-daemon
-          -Dtest.quickjs.so=${{ github.workspace }}/quickjs-wrapper/wrapper-java/build/cmake/libquickjs-java-wrapper.so
+        run: ./gradlew test --no-daemon
