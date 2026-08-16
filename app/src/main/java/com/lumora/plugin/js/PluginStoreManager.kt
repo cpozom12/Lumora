@@ -87,14 +87,16 @@ class PluginStoreManager(
         if (isAllowedStoreUrl(fileUrl)) fetchText(fileUrl) else null
     }
 
-    private fun fetchText(url: String): String? = try {
+    private fun fetchText(url: String): String? {
         if (!isAllowedStoreUrl(url)) return null
-        val request = Request.Builder().url(url).build()
-        httpClient.newCall(request).execute().use { response ->
-            if (response.isSuccessful) response.body?.string() else null
+        return try {
+            val request = Request.Builder().url(url).build()
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) response.body?.string() else null
+            }
+        } catch (_: Exception) {
+            null
         }
-    } catch (_: Exception) {
-        null
     }
 
     private fun isAllowedStoreUrl(url: String): Boolean = url.trim().startsWith("https://")
