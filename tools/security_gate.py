@@ -15,6 +15,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_APPLICATION_ID = 'com.cpozom.lumora'
+EXPECTED_MEDIA_PACKAGES = (
+    'pe.movistar.go',
+    'com.netflix.mediaclient',
+    'com.disney.disneyplus',
+    'com.google.android.youtube',
+    'com.amazon.avod.thirdpartyclient',
+    'com.wbd.stream',
+)
 
 
 def read(rel: str) -> str:
@@ -48,6 +56,8 @@ def check_source() -> None:
     iptv_store = read('app/src/main/java/com/lumora/data/IptvProviderStore.kt')
     media_store = read('app/src/main/java/com/lumora/data/MediaServerStore.kt')
     network = read('app/src/main/java/com/lumora/scraper/utils/NetworkClient.kt')
+    provider_registry = read('app/src/main/java/com/lumora/hub/ExternalMediaProvider.kt')
+    provider_launcher = read('app/src/main/java/com/lumora/hub/ExternalProviderLauncher.kt')
 
     require(f'applicationId = "{EXPECTED_APPLICATION_ID}"' in gradle,
             f'applicationId must remain {EXPECTED_APPLICATION_ID}')
@@ -64,6 +74,8 @@ def check_source() -> None:
 
     require('android.permission.REQUEST_INSTALL_PACKAGES' not in manifest,
             'REQUEST_INSTALL_PACKAGES must not be declared')
+    require('android.permission.QUERY_ALL_PACKAGES' not in manifest,
+            'QUERY_ALL_PACKAGES must not be declared')
     require('android:allowBackup="false"' in manifest,
             'Android backup must remain disabled')
     require('.torrent.TorrentForegroundService' not in manifest,
@@ -96,6 +108,18 @@ def check_source() -> None:
     require('trustAll: OkHttpClient get() = default' in network,
             'legacy trustAll alias must remain validating')
 
+    # Media Hub handoffs are a static reviewed allow-list. No broad package discovery, remote
+    # catalogue or attempt to use CarContext.startCarApp to force another app onto the car screen.
+    for package_name in EXPECTED_MEDIA_PACKAGES:
+        require(package_name in provider_registry,
+                f'reviewed media package missing from registry: {package_name}')
+        require(f'android:name="{package_name}"' in manifest,
+                f'reviewed media package missing from manifest queries: {package_name}')
+    require('http://' not in provider_registry and 'https://' not in provider_registry,
+            'media provider registry must not become a remote catalogue')
+    require('context.startCarApp(' not in provider_launcher,
+            'external provider launcher must not force third-party car-app launches')
+
 
 def check_apk(apk: Path) -> None:
     require(apk.is_file(), f'APK not found: {apk}')
@@ -103,6 +127,7 @@ def check_apk(apk: Path) -> None:
     forbidden_native = ('torrent', 'quickjs')
     forbidden_dex_markers = (
         b'android.permission.REQUEST_INSTALL_PACKAGES',
+        b'android.permission.QUERY_ALL_PACKAGES',
         b'api.github.com/repos/disclosurez/Lumora/releases',
         b'disclosurez/Lumora/releases',
         b'org.mozilla.javascript',
