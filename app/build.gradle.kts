@@ -39,7 +39,11 @@ android {
 
     buildTypes {
         debug {
-            isMinifyEnabled = false
+            // Security-audit builds are minified too. The inherited scraper/plugin implementations
+            // are quarantined by empty/fail-closed registries; R8 must prove that by stripping
+            // unreachable implementations and their embedded third-party domains from the APK.
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             applicationIdSuffix = ".debug"
         }
         release {
@@ -95,20 +99,17 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.retrofit2:converter-scalars:2.11.0")
 
-    // CPZ HARDENING: Rhino and Java-WebSocket were removed. The inherited scraper registry is
-    // empty and its remote-JS Rhino extractor fails closed.
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("com.google.zxing:core:3.5.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // Sandboxed JS plugin engine remains for compatibility. No store is trusted by default and
-    // installed scripts remain disabled until explicitly enabled.
+    // Transitional compile-time compatibility only. Remote plugin stores and executable scripts
+    // are fail-closed, and BaseApplication does not load QuickJS during startup.
     implementation("wang.harlon.quickjs:wrapper-android:3.2.3")
     implementation("org.jsoup:jsoup:1.21.2")
 
-    // CPZ HARDENING: NanoHTTPD and libtorrent4j/native P2P libraries are intentionally absent.
-    // TorrentEngine is now a fail-closed compatibility stub.
+    // Rhino, Java-WebSocket, NanoHTTPD and all libtorrent4j/native P2P dependencies are absent.
 
     implementation("androidx.mediarouter:mediarouter:1.7.0")
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
