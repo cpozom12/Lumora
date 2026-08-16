@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fail CI if CPZ security invariants regress.
 
-This is intentionally dependency-free so it can run in GitHub Actions and locally.
-It checks source/build configuration first and, when --apk is supplied, scans the
-built artifact for runtime payloads that must never ship in the trusted build.
+Dependency-free by design so it can run in GitHub Actions and locally. It checks
+source/build configuration first and, when --apk is supplied, scans the built
+artifact for runtime payloads that must never ship in the trusted build.
 """
 
 from __future__ import annotations
@@ -26,8 +26,17 @@ def require(condition: bool, message: str) -> None:
         raise SystemExit(f'SECURITY GATE FAILED: {message}')
 
 
+def gradle_dependency_lines(gradle: str) -> str:
+    prefixes = ('implementation(', 'api(', 'compileOnly(', 'runtimeOnly(', 'ksp(')
+    return '\n'.join(
+        line.strip() for line in gradle.splitlines()
+        if line.strip().startswith(prefixes)
+    )
+
+
 def check_source() -> None:
     gradle = read('app/build.gradle.kts')
+    deps = gradle_dependency_lines(gradle)
     manifest = read('app/src/main/AndroidManifest.xml')
     updater = read('app/src/main/java/com/lumora/data/update/AppUpdateChecker.kt')
     installer = read('app/src/main/java/com/lumora/data/update/AppUpdateInstaller.kt')
@@ -45,12 +54,13 @@ def check_source() -> None:
 
     for banned in (
         'org.mozilla:rhino',
-        'libtorrent4j',
-        'NanoHTTPD',
-        'Java-WebSocket',
-        'quickjs-android',
+        'libtorrent',
+        'nanohttpd',
+        'java-websocket',
+        'quickjs',
     ):
-        require(banned not in gradle, f'forbidden dependency marker present: {banned}')
+        require(banned.lower() not in deps.lower(),
+                f'forbidden dependency marker present: {banned}')
 
     require('android.permission.REQUEST_INSTALL_PACKAGES' not in manifest,
             'REQUEST_INSTALL_PACKAGES must not be declared')
