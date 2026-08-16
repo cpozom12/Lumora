@@ -31,14 +31,9 @@ class BaseApplication : Application() {
             // Google Play Services not available on this device.
         }
 
-        // CPZ hardening: do not initialize/load the native QuickJS runtime during application
-        // startup. Remote plugin execution is disabled in the hardened baseline. Keeping the
-        // dependency temporarily avoids a broad upstream UI refactor, but its native code is not
-        // placed into the running process through the normal startup path.
-
-        // Context retained temporarily for inherited scraper compatibility. The scraper provider
-        // registry itself is empty in the hardened baseline.
-        com.lumora.scraper.ScraperApp.init(this)
+        // CPZ trusted build: no remote executable-plugin runtime and no inherited web-scraper
+        // application context is initialized here. Keeping startup free of those compatibility
+        // surfaces allows R8 to remove their unreachable implementation from the shipped APK.
 
         okHttpClient = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)

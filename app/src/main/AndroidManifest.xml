@@ -6,38 +6,29 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
+    <!-- Personal Media Hub V1 keeps a deliberately small permission surface. INTERNET and
+         network-state remain for inherited trusted HTTPS media/server paths; provider handoff
+         itself does not receive provider credentials or content. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- WorkManager may use its own foreground service for user-visible long-running work. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-
-    <!-- No location permission: the upstream manifest declared FINE_LOCATION for Cast but no
-         app source requested/used it. The CPZ trusted build does not expose location capability. -->
 
     <!-- Android Auto Car App Library surface permissions. -->
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
 
-    <!-- No REQUEST_INSTALL_PACKAGES permission. Updates are externally reviewed artifacts. -->
+    <!-- Intentionally absent from the personal Hub build: location, camera, microphone, SMS,
+         contacts, storage, install-packages, query-all-packages, boot, notification, foreground
+         service and multicast permissions. -->
 
     <queries>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:mimeType="video/*" />
-        </intent>
-        <package android:name="org.videolan.vlc" />
-        <package android:name="com.mxtech.videoplayer.pro" />
-        <package android:name="com.mxtech.videoplayer.ad" />
-        <package android:name="com.brouken.player" />
-        <package android:name="is.xyz.mpv" />
+        <!-- Reviewed CPZ Media Hub handoff targets. Package visibility is explicit rather than
+             broad QUERY_ALL_PACKAGES access. -->
+        <package android:name="pe.movistar.go" />
+        <package android:name="com.netflix.mediaclient" />
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.amazon.avod.thirdpartyclient" />
+        <package android:name="com.wbd.stream" />
     </queries>
 
     <application
@@ -47,14 +38,14 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:banner="@mipmap/banner_tv"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="@string/cpz_app_name"
         android:localeConfig="@xml/locales_config"
         android:appCategory="game"
         android:largeHeap="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Lumora"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"
@@ -85,21 +76,8 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <receiver android:name=".reminder.ReminderAlarmReceiver" android:exported="false" />
-        <receiver android:name=".reminder.ReminderBootReceiver" android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-
-        <receiver android:name=".recording.RecordingAlarmReceiver" android:exported="false" />
-        <receiver android:name=".recording.RecordingRestoreReceiver" android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-
-        <!-- No torrent foreground service in the CPZ trusted build. -->
+        <!-- Reminder/recording receivers are intentionally not registered in personal Hub V1.
+             The underlying compatibility code may remain until the inherited phone UI is pruned. -->
 
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
@@ -109,7 +87,7 @@
             android:name=".auto.LumoraCarAppService"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
-            android:label="@string/app_name">
+            android:label="@string/cpz_app_name">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.POI" />

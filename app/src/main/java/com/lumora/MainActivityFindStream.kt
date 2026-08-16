@@ -1,25 +1,26 @@
 package com.lumora
 
+import android.widget.Toast
 import com.lumora.model.Channel
 
 /**
- * Searches every enabled source for [item] and starts playing the best one that resolves.
+ * Compatibility entry point retained while the personal Media Hub is separated from the inherited
+ * scraper stack.
  *
- * [season]/[episode] pick the episode of a series; without them sources are asked for S01E01,
- * the only sane default when the caller does not know.
- *
- * Delegates to [StreamResolver], which owns the whole find-stream state machine.
+ * The trusted CPZ build does not resolve films/series through bundled scraper sites or executable
+ * plugins. Keeping this small facade lets the inherited catalogue UI compile without retaining a
+ * runtime edge to [StreamResolver] and its third-party scraper graph. R8 can therefore remove that
+ * graph from the shipped APK.
  */
 internal fun MainActivity.showFindStreamDialog(
-    item: Channel,
-    season: Int? = null,
-    episode: Int? = null,
-    /**
-     * When set, the resolved stream is handed here instead of being played - the Download button
-     * uses it to find a source for a title that has none yet. The [Channel] carries the resolved
-     * url and headers; nothing is started, so no watchdog is armed.
-     */
-    onResolved: ((Channel) -> Unit)? = null,
+    @Suppress("UNUSED_PARAMETER") item: Channel,
+    @Suppress("UNUSED_PARAMETER") season: Int? = null,
+    @Suppress("UNUSED_PARAMETER") episode: Int? = null,
+    @Suppress("UNUSED_PARAMETER") onResolved: ((Channel) -> Unit)? = null,
 ) {
-    StreamResolver(this, item, season, episode, onResolved).start()
+    Toast.makeText(
+        this,
+        "Inherited web-scraper playback is disabled in the CPZ trusted build",
+        Toast.LENGTH_LONG,
+    ).show()
 }
