@@ -24,6 +24,46 @@ EXPECTED_MEDIA_PACKAGES = (
     'com.wbd.stream',
 )
 
+# These hosts belonged to the inherited public-site scraper/extractor stack. Source compatibility
+# code may still exist temporarily while the upstream UI is untangled, but none of it is allowed
+# to survive R8 into the CPZ trusted APK.
+FORBIDDEN_SCRAPER_MARKERS = (
+    b'aniworld.to',
+    b'anime-world.in',
+    b'dood.pm',
+    b'dood.re',
+    b'doodstream.com',
+    b'mixdrop.top',
+    b'mixdrop.ag',
+    b'megacloud.blog',
+    b'serienstream.to',
+    b'cineby.app',
+    b'streamingcommunityz.land',
+    b'vixsrc.to',
+    b'supervideo.tv',
+    b'filemoon.sx',
+    b'videasy.net',
+    b'vidsrc.cc',
+    b'vidsrc-embed.ru',
+    b'vidsrc-embed.su',
+    b'vidfast.pro',
+    b'2embed.cc',
+    b'vidlink.pro',
+    b'videostr.net',
+    b'4khdhub.fans',
+    b'101kittens.com',
+    b'hydrax.net',
+    b'yourupload.com',
+    b'waaw.to',
+    b'wishonly.site',
+    b'savefiles.com',
+    b'luluvid.com',
+    b'moviesapi.club',
+    b'streamtape.com',
+    b'vidmoly.me',
+    b'disclosurez/lumora-plugins',
+)
+
 
 def read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding='utf-8')
@@ -119,6 +159,8 @@ def check_source() -> None:
             'media provider registry must not become a remote catalogue')
     require('context.startCarApp(' not in provider_launcher,
             'external provider launcher must not force third-party car-app launches')
+    require('catch (t: Throwable)' not in provider_launcher,
+            'external provider launcher must not swallow arbitrary fatal errors')
 
 
 def check_apk(apk: Path) -> None:
@@ -135,7 +177,10 @@ def check_apk(apk: Path) -> None:
         b'libtorrent4j',
         b'fi/iki/elonen/NanoHTTPD',
         b'org/java_websocket',
-    )
+        b'DexClassLoader',
+        b'/system/bin/su',
+        b'Magisk',
+    ) + FORBIDDEN_SCRAPER_MARKERS
 
     with zipfile.ZipFile(apk) as zf:
         names = zf.namelist()
@@ -149,9 +194,14 @@ def check_apk(apk: Path) -> None:
         dex_names = [n for n in names if n.endswith('.dex')]
         require(dex_names, 'APK contains no DEX files')
         dex = b''.join(zf.read(name) for name in dex_names)
+        lowered_dex = dex.lower()
         for marker in forbidden_dex_markers:
-            require(marker not in dex,
+            require(marker.lower() not in lowered_dex,
                     f'forbidden runtime marker shipped in APK: {marker.decode("ascii", errors="ignore")}')
+
+        for package_name in EXPECTED_MEDIA_PACKAGES:
+            require(package_name.encode('ascii') in dex,
+                    f'reviewed media provider missing from built APK: {package_name}')
 
     print(f'APK security scan passed: {apk}')
 
