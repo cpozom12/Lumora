@@ -1,10 +1,19 @@
 package com.lumora.scraper.utils
 
+import android.os.Build
 import android.util.Log
 import android.webkit.CookieManager
+import com.lumora.R
+import com.lumora.scraper.ScraperApp
+import java.security.KeyStore
+import java.security.SecureRandom
+import java.security.cert.CertificateFactory
+import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
 import okhttp3.ConnectionPool
 import okhttp3.ConnectionSpec
-import com.lumora.scraper.ScraperConfig
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.Dispatcher
@@ -12,80 +21,51 @@ import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.TlsVersion
-import okhttp3.logging.HttpLoggingInterceptor
-import java.security.KeyStore
-import java.security.SecureRandom
-import java.security.cert.CertificateFactory
-import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509TrustManager
-import com.lumora.scraper.ScraperApp
-import com.lumora.R
-import android.os.Build
 
+/** Shared network clients for the scraper compatibility layer.
+ *
+ * CPZ hardening invariants:
+ *  - certificate validation is never disabled;
+ *  - hostname verification is never disabled;
+ *  - request headers/cookies/tokens are not dumped to logcat;
+ *  - HTTPS uses TLS 1.2+ only.
+ */
 object NetworkClient {
 
-    private const val TAG = "Cine24hBypass"
-    
-    // User-Agent Mobile standard per massima compatibilità con Cloudflare
+    private const val TAG = "NetworkClient"
     const val USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
 
     private val cookieManager by lazy { CookieManager.getInstance() }
 
     val cookieJar = object : CookieJar {
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            cookies.forEach { cookie ->
-                cookieManager.setCookie(url.toString(), cookie.toString())
-            }
+            cookies.forEach { cookie -> cookieManager.setCookie(url.toString(), cookie.toString()) }
             cookieManager.flush()
         }
 
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
             val cookieString = cookieManager.getCookie(url.toString()) ?: return emptyList()
-            return cookieString.split(";").mapNotNull {
-                Cookie.parse(url, it.trim())
-            }
+            return cookieString.split(";").mapNotNull { Cookie.parse(url, it.trim()) }
         }
     }
 
-    private val loggingInterceptor by lazy {
-        HttpLoggingInterceptor { message ->
-            Log.d(TAG, "[OkHttp] $message")
-        }.apply {
-            level = HttpLoggingInterceptor.Level.HEADERS
-        }
-    }
-
-    // One connection pool and one dispatcher shared by every client built through newClient(),
-    // so the app does not spin up a pool/dispatcher thread-pool per scraper provider.
     private val sharedPool: ConnectionPool by lazy { ConnectionPool() }
     private val sharedDispatcher: Dispatcher by lazy { Dispatcher() }
 
     val default: OkHttpClient by lazy { buildClient(DnsResolver.doh) }
     val systemDns: OkHttpClient by lazy { buildClient(Dns.SYSTEM) }
-    val noRedirects: OkHttpClient by lazy { buildClient(DnsResolver.doh) { it.followRedirects(false).followSslRedirects(false) } }
-
-    val trustAll: OkHttpClient by lazy {
-        val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
-            override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) {}
-            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
-        })
-        val sslContext = SSLContext.getInstance("TLS").apply { init(null, trustAllCerts, SecureRandom()) }
-        buildClient(DnsResolver.doh) {
-            it.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-              .hostnameVerifier { _, _ -> true }
-        }
+    val noRedirects: OkHttpClient by lazy {
+        buildClient(DnsResolver.doh) { it.followRedirects(false).followSslRedirects(false) }
     }
 
     /**
-     * Factory for per-provider clients. Builds on [buildClient] (default headers, cookie jar,
-     * timeouts, TLS) and additionally routes the client through the single shared
-     * [sharedPool]/[sharedDispatcher] so all scraper providers reuse one connection pool and one
-     * dispatcher thread pool instead of creating one per client.
+     * Compatibility alias for old provider code that called `trustAll`. It is intentionally the
+     * same fully validating client as [default]. Keeping the symbol lets us harden first and then
+     * remove legacy `buildUnsafe()` APIs without leaving any path that disables TLS validation.
      */
+    @Deprecated("Unsafe TLS is disabled in the CPZ hardened build")
+    val trustAll: OkHttpClient get() = default
+
     fun newClient(
         dns: Dns = DnsResolver.doh,
         customizer: ((OkHttpClient.Builder) -> Unit)? = null,
@@ -100,22 +80,16 @@ object NetworkClient {
                 val original = chain.request()
                 val requestBuilder = original.newBuilder()
                 val isCorsRequest = original.header("Sec-Fetch-Mode") == "cors" ||
-                        original.header("Sec-Fetch-Dest") == "empty"
-                // Only set default headers if not already provided by the caller (e.g. an extractor)
-                if (original.header("User-Agent") == null)
-                    requestBuilder.header("User-Agent", USER_AGENT)
-                if (original.header("Accept") == null)
+                    original.header("Sec-Fetch-Dest") == "empty"
+                if (original.header("User-Agent") == null) requestBuilder.header("User-Agent", USER_AGENT)
+                if (original.header("Accept") == null) {
                     requestBuilder.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-                if (original.header("Accept-Language") == null)
-                    requestBuilder.header("Accept-Language", "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7")
-                if (!isCorsRequest && original.header("Sec-Fetch-Dest") == null)
-                    requestBuilder.header("Sec-Fetch-Dest", "document")
-                if (!isCorsRequest && original.header("Sec-Fetch-Mode") == null)
-                    requestBuilder.header("Sec-Fetch-Mode", "navigate")
-                if (!isCorsRequest && original.header("Sec-Fetch-Site") == null)
-                    requestBuilder.header("Sec-Fetch-Site", "none")
-                if (!isCorsRequest && original.header("Upgrade-Insecure-Requests") == null)
-                    requestBuilder.header("Upgrade-Insecure-Requests", "1")
+                }
+                if (original.header("Accept-Language") == null) requestBuilder.header("Accept-Language", "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7")
+                if (!isCorsRequest && original.header("Sec-Fetch-Dest") == null) requestBuilder.header("Sec-Fetch-Dest", "document")
+                if (!isCorsRequest && original.header("Sec-Fetch-Mode") == null) requestBuilder.header("Sec-Fetch-Mode", "navigate")
+                if (!isCorsRequest && original.header("Sec-Fetch-Site") == null) requestBuilder.header("Sec-Fetch-Site", "none")
+                if (!isCorsRequest && original.header("Upgrade-Insecure-Requests") == null) requestBuilder.header("Upgrade-Insecure-Requests", "1")
                 chain.proceed(requestBuilder.build())
             }
             .cookieJar(cookieJar)
@@ -123,78 +97,51 @@ object NetworkClient {
             .readTimeout(30, TimeUnit.SECONDS)
             .dns(dns)
 
-        // Modern and compatible TLS configuration
-        val spec = ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
-            .tlsVersions(TlsVersion.TLS_1_3, TlsVersion.TLS_1_2, TlsVersion.TLS_1_1, TlsVersion.TLS_1_0)
+        val secureTls = ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
+            .tlsVersions(TlsVersion.TLS_1_3, TlsVersion.TLS_1_2)
             .build()
-        builder.connectionSpecs(listOf(spec, ConnectionSpec.COMPATIBLE_TLS, ConnectionSpec.CLEARTEXT))
+        builder.connectionSpecs(listOf(secureTls, ConnectionSpec.CLEARTEXT))
 
-        // SSL compatibility for Android < 9.0 (API 28) and ISRG Root X1 for Let's Encrypt
+        // Preserve compatibility with Let's Encrypt on old Android without bypassing PKI:
+        // system roots remain trusted and the bundled ISRG Root X1 is added as one additional CA.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             try {
-                // On older Android we manually inject the Let's Encrypt ISRG Root X1 certificate
-                // and enable older TLS versions just in case.
-                
                 val cf = CertificateFactory.getInstance("X.509")
-                val certInput = ScraperApp.instance.resources.openRawResource(R.raw.isrg_root_x1)
-                val isrgCert = certInput.use { cf.generateCertificate(it) }
-
-                val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
+                val isrgCert = ScraperApp.instance.resources.openRawResource(R.raw.isrg_root_x1).use {
+                    cf.generateCertificate(it)
+                }
+                val tmfAlgorithm = TrustManagerFactory.getDefaultAlgorithm()
+                val customStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
                     load(null, null)
                     setCertificateEntry("isrg_root_x1", isrgCert)
                 }
-
-                // Initialize TMF with our certificate
-                val tmfAlgorithm = TrustManagerFactory.getDefaultAlgorithm()
-                val tmf = TrustManagerFactory.getInstance(tmfAlgorithm).apply {
-                    init(keyStore)
-                }
-
-                // Get system TMF for regular certificates
-                val systemTmf = TrustManagerFactory.getInstance(tmfAlgorithm).apply {
-                    init(null as KeyStore?)
-                }
-
-                val systemTrustManager = systemTmf.trustManagers.first { it is X509TrustManager } as X509TrustManager
-                val customTrustManager = tmf.trustManagers.first { it is X509TrustManager } as X509TrustManager
-
-                // Custom trust manager that trusts both system and our bundled certificate
-                val combinedTrustManager = object : X509TrustManager {
+                val customTmf = TrustManagerFactory.getInstance(tmfAlgorithm).apply { init(customStore) }
+                val systemTmf = TrustManagerFactory.getInstance(tmfAlgorithm).apply { init(null as KeyStore?) }
+                val systemTm = systemTmf.trustManagers.first { it is X509TrustManager } as X509TrustManager
+                val customTm = customTmf.trustManagers.first { it is X509TrustManager } as X509TrustManager
+                val combined = object : X509TrustManager {
                     override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {
-                        systemTrustManager.checkClientTrusted(chain, authType)
+                        systemTm.checkClientTrusted(chain, authType)
                     }
-
                     override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {
                         try {
-                            systemTrustManager.checkServerTrusted(chain, authType)
-                        } catch (e: Exception) {
-                            try {
-                                customTrustManager.checkServerTrusted(chain, authType)
-                            } catch (e2: Exception) {
-                                // Fallback to system check as a last resort, throwing if it fails
-                                systemTrustManager.checkServerTrusted(chain, authType)
-                            }
+                            systemTm.checkServerTrusted(chain, authType)
+                        } catch (systemFailure: Exception) {
+                            customTm.checkServerTrusted(chain, authType)
                         }
                     }
-
-                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> {
-                        return systemTrustManager.acceptedIssuers + customTrustManager.acceptedIssuers
-                    }
+                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> =
+                        systemTm.acceptedIssuers + customTm.acceptedIssuers
                 }
-
                 val sslContext = SSLContext.getInstance("TLS").apply {
-                    init(null, arrayOf(combinedTrustManager), SecureRandom())
+                    init(null, arrayOf(combined), SecureRandom())
                 }
-                
-                builder.sslSocketFactory(sslContext.socketFactory, combinedTrustManager)
+                builder.sslSocketFactory(sslContext.socketFactory, combined)
             } catch (e: Exception) {
-                Log.e(TAG, "Error setting up SSL compatibility: ${e.message}")
+                Log.w(TAG, "Could not add legacy ISRG root; using platform TLS: ${e.message}")
             }
         }
 
-        if (ScraperConfig.DEBUG) {
-            builder.addInterceptor(loggingInterceptor)
-        }
         customizer?.invoke(builder)
         return builder.build()
     }
