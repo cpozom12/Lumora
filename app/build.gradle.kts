@@ -45,10 +45,6 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
-            // Distinct applicationId + label so a debug build installs alongside the release
-            // "Lumora" on a device instead of replacing it. Manifest provider authorities are
-            // already ${applicationId}-derived, so they follow the suffix automatically; the
-            // label override lives in src/debug/res/values/strings.xml.
             applicationIdSuffix = ".debug"
         }
         release {
@@ -79,15 +75,10 @@ android {
 
     packaging {
         jniLibs {
-            // Extract .so files to disk instead of loading them directly from the APK. libtorrent4j's
-            // native libs are not PAGE-aligned, so direct-from-apk loading throws "not PAGE-aligned -
-            // cannot open directly from apk" on older devices (old Fire TV sticks); legacy extraction
-            // avoids the crash at the cost of a little install-time unpacking.
             useLegacyPackaging = true
         }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            // Multiple jlibtorrent per-ABI artifacts carry the same license/notice files.
             excludes += setOf("META-INF/LICENSE*", "META-INF/NOTICE*")
         }
     }
@@ -119,35 +110,20 @@ dependencies {
 
     // Networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // DNS-over-HTTPS for com.lumora.scraper - the scraper sites are the ones ISP resolvers
-    // blackhole, so their OkHttp stack resolves through a user-selectable DoH endpoint and only
-    // falls back to system DNS per-lookup (see scraper/utils/DnsResolver.kt).
     implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // Retrofit - only used by com.lumora.scraper. The ~66 ported site scrapers are all written
-    // as Retrofit services returning a Jsoup Document via the inlined
-    // com.tanasi.retrofit_jsoup converter, so this is what lets them compile unmodified rather
-    // than being rewritten against raw OkHttp.
+    // Retrofit - used by the inherited scraper compatibility layer.
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.retrofit2:converter-scalars:2.11.0")
 
-    // Rhino - runs the AAEncode-obfuscated JS that one extractor's host wraps its source list in
-    // (scraper/utils/AADecoder.java). QuickJS is already here for the plugin engine but its
-    // wrapper is bound to the plugin sandbox's lifecycle, not callable as a bare evaluator.
-    implementation("org.mozilla:rhino:1.8.0")
-
-    // LAN WebSocket bridge for the scraper's Cloudflare bypass: a TV that cannot clear a
-    // challenge in its own WebView hands the URL to a phone browser and gets the cookies back
-    // (scraper/utils/BypassWebSocket*.kt).
-    implementation("org.java-websocket:Java-WebSocket:1.5.3")
+    // CPZ HARDENING: Rhino was removed because upstream evaluated JavaScript received from a
+    // remote streaming host in a standard Java-enabled Rhino scope. The affected extractor now
+    // fails closed instead. The unused LAN Java-WebSocket bridge was removed as well.
 
     // JSON
     implementation("com.google.code.gson:gson:2.10.1")
-    // 1.6.3 is the last line compatible with Kotlin 1.9.22 - the 1.8.x releases the upstream
-    // scraper app used require Kotlin 2.x, which would drag the whole toolchain forward for
-    // nothing this needs.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     // QR code generation (ZXing)
@@ -156,27 +132,16 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // In-process JS plugin engine - replaces the old Messenger/APK plugin protocol. Plain Java
-    // JNI wrapper (no Kotlin-version coupling, unlike Cash App's quickjs-android/Zipline line,
-    // which requires Kotlin 2.4+ and would have forced an unrelated toolchain bump here).
+    // In-process JS plugin engine. Remote stores are no longer trusted by default and new
+    // scripts install disabled; see PluginStoreManager/PluginScriptManager.
     implementation("wang.harlon.quickjs:wrapper-android:3.2.3")
 
-    // HTML parsing for JS plugin host API (torrent scraper plugin uses host.parseHtml) and for
-    // every com.lumora.scraper site provider.
-    // 1.21.x specifically: Elements.filter(NodeFilter) was removed there, and while it existed
-    // it shadowed Kotlin's Iterable.filter as a member, so the many `elements.filter { ... }`
-    // calls across the ported providers resolved to the NodeFilter overload and failed.
+    // HTML parsing for plugins and inherited scraper providers.
     implementation("org.jsoup:jsoup:1.21.2")
 
-    // Native torrent streaming engine (com.lumora.torrent) - moved in-process from the old
-    // torrentplugin APK; only the scraper/search half became a JS script (torrent-search.js),
-    // this half needs libtorrent itself so it stays native Kotlin.
+    // Native torrent streaming engine. Retained temporarily for baseline compatibility; it is
+    // scheduled for removal from the minimal CPZ media-client product unless explicitly needed.
     implementation("org.nanohttpd:nanohttpd:2.3.1")
-    // libtorrent4j (libtorrent 2.0.x), not FrostWire's jlibtorrent (libtorrent 1.2). 1.2 decides
-    // whether it may connect to an address from the routing table it reads over netlink, and
-    // Android only shows an app LAN + loopback routes - no default route - so every listen socket
-    // was treated as local-network-only and the engine refused to dial a single peer or announce
-    // to a single tracker (verified on device: 1000 known candidates, 0 connections).
     implementation("org.libtorrent4j:libtorrent4j:2.1.0-35")
     implementation("org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-35")
     implementation("org.libtorrent4j:libtorrent4j-android-arm:2.1.0-35")
@@ -186,10 +151,10 @@ dependencies {
     implementation("androidx.mediarouter:mediarouter:1.7.0")
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
 
-    // Media session / browse tree - what Android Auto's media category binds to (auto/).
+    // Media session / browse tree
     implementation("androidx.media3:media3-session:1.4.1")
 
-    // Android Auto (see auto/ - CarAppService).
+    // Android Auto (CarAppService)
     implementation("androidx.car.app:app:1.7.0")
 
     // Android TV
@@ -200,10 +165,6 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
-// Passes -Dtest.quickjs.so through to the test JVM. wrapper-android's prebuilt native lib only
-// covers Android ABIs, so JsPluginEngineTest's real QuickJS execution needs a desktop build of
-// wrapper-java's native lib to run locally (see JsPluginEngineTest for the build steps) - a
-// no-op when the property isn't set.
 tasks.withType<Test>().configureEach {
     systemProperty("test.quickjs.so", System.getProperty("test.quickjs.so") ?: "")
 }
