@@ -6,12 +6,21 @@ on:
   pull_request:
     branches: [ main ]
 
-# CI only reads repository content. Keep the workflow token least-privileged.
 permissions:
   contents: read
 
 jobs:
+  validate-wrapper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
   lint:
+    needs: validate-wrapper
     runs-on: ubuntu-latest
     env:
       BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || 'main' }}
@@ -68,6 +77,7 @@ jobs:
         run: ./gradlew :app:lintDebug --no-daemon
 
   build:
+    needs: validate-wrapper
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -89,6 +99,7 @@ jobs:
           if-no-files-found: error
 
   test:
+    needs: validate-wrapper
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
