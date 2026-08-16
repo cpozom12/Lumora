@@ -12,6 +12,29 @@ Baseline product goals:
 - Expandable support for Prime Video, Max, YouTube, Apple TV+, Paramount+, Crunchyroll and other legitimate services where a supported integration path exists
 - Phone, TV/large-screen and parked-car UX, while keeping platform motion/driver-distraction restrictions intact
 
+## Personal-first delivery strategy
+
+The first usable product is a CPZ-owned APK for personal sideloading and validation from the CPZ repository. Public distribution, Play Store eligibility and commercial packaging are later milestones.
+
+### Personal experimental build
+
+Initial priority:
+- produce a reproducible, signed CPZ APK stored/released from the CPZ repository;
+- install it manually on the owner's Android phone;
+- expose one CPZ Media Hub entry in Android Auto;
+- inside that hub, present provider tiles such as Netflix, Disney+, IPTV, Plex, Jellyfin, YouTube, Prime Video and Max;
+- validate the experience on the target phone/head unit before optimizing for public distribution.
+
+The current `android:appCategory="game"` marker may remain temporarily in the personal/experimental build as an Android Auto parked-app compatibility mechanism. It is not a product claim that CPZ Media Hub is a game and must not be used as the basis for a future public/Play Store release.
+
+The experimental build must still preserve Android Auto's parked-only lifecycle. No code may defeat, neutralize or work around the platform behavior that exits/blocks parked apps when vehicle motion is detected.
+
+### Future public build
+
+A later public version must use a platform-supported category and distribution path appropriate to its actual functionality. If Android Auto gains generally available video/media-hub support, the public build can migrate to it. Until then, public compliance work is intentionally separate from the personal experimental APK.
+
+Keep the personal and public concerns separable so a future compliance migration does not require rewriting the provider/core architecture.
+
 ## Provider integration tiers
 
 Every provider must declare one integration tier. The UI can present providers consistently, but playback/authentication behavior must stay provider-specific.
@@ -110,8 +133,10 @@ The UI should consume capabilities rather than contain provider-specific branchi
 ## Delivery order
 
 1. Stabilize and validate the hardened inherited app.
-2. Introduce provider capability abstractions without changing existing playback behavior.
-3. Add Netflix and Disney+ Tier B provider cards/launchers as baseline commercial-streaming integrations.
-4. Add additional commercial providers through the same Tier B abstraction.
-5. Evaluate each provider for a legitimate Tier C path; promote only when an official integration is available.
-6. Optimize phone/TV/parked-car surfaces without duplicating provider logic.
+2. Produce the personal experimental CPZ APK and validate Android Auto parked-mode presence/lifecycle on the target hardware.
+3. Introduce provider capability abstractions without changing existing playback behavior.
+4. Add Netflix and Disney+ provider tiles/official-app handoff as baseline commercial-streaming integrations where the platform allows it.
+5. Add additional commercial providers through the same Tier B abstraction.
+6. Evaluate each provider for a legitimate Tier C path; promote only when an official integration is available.
+7. Optimize phone/TV/parked-car surfaces without duplicating provider logic.
+8. Only after the personal product is stable, design the separate public/compliant distribution profile.
