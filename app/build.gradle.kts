@@ -39,9 +39,8 @@ android {
 
     buildTypes {
         debug {
-            // Security-audit builds are minified too. The inherited scraper/plugin implementations
-            // are quarantined by empty/fail-closed registries; R8 must prove that by stripping
-            // unreachable implementations and their embedded third-party domains from the APK.
+            // Security-audit builds are minified too. R8 must prove the quarantined inherited
+            // scraper surface is unreachable by stripping it and its embedded third-party domains.
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             applicationIdSuffix = ".debug"
@@ -86,7 +85,6 @@ dependencies {
     implementation("androidx.media3:media3-session:1.4.1")
 
     implementation("androidx.recyclerview:recyclerview:1.3.2")
-
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
@@ -103,13 +101,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("com.google.zxing:core:3.5.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
-    // Transitional compile-time compatibility only. Remote plugin stores and executable scripts
-    // are fail-closed, and BaseApplication does not load QuickJS during startup.
-    implementation("wang.harlon.quickjs:wrapper-android:3.2.3")
     implementation("org.jsoup:jsoup:1.21.2")
 
-    // Rhino, Java-WebSocket, NanoHTTPD and all libtorrent4j/native P2P dependencies are absent.
+    // CPZ HARDENING: QuickJS, Rhino, Java-WebSocket, NanoHTTPD and all libtorrent4j/native P2P
+    // dependencies are absent. Executable plugin APIs are fail-closed compatibility facades.
 
     implementation("androidx.mediarouter:mediarouter:1.7.0")
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
@@ -118,8 +113,4 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-}
-
-tasks.withType<Test>().configureEach {
-    systemProperty("test.quickjs.so", System.getProperty("test.quickjs.so") ?: "")
 }
