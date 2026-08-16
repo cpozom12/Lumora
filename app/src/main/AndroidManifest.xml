@@ -12,27 +12,23 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- WorkManager may use its own foreground service for user-visible long-running work. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- Cast discovery. -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- No location permission: the upstream manifest declared FINE_LOCATION for Cast but no
+         app source requested/used it. The CPZ trusted build does not expose location capability. -->
 
     <!-- Android Auto Car App Library surface permissions. -->
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
 
-    <!-- No REQUEST_INSTALL_PACKAGES permission in the CPZ hardened build. Updates must be
-         installed from a separately verified artifact/release, never fetched and installed by
-         the app itself. -->
+    <!-- No REQUEST_INSTALL_PACKAGES permission. Updates are externally reviewed artifacts. -->
 
     <queries>
-        <!-- External playback (player/ExternalPlayer.kt). -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="video/*" />
@@ -71,7 +67,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.CAR_LAUNCHER" />
+                <category android:name="android.category.CAR_LAUNCHER" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -79,7 +75,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Kept for external-player/content URI compatibility. It is non-exported. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -104,10 +99,7 @@
             </intent-filter>
         </receiver>
 
-        <service
-            android:name=".torrent.TorrentForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
+        <!-- No torrent foreground service in the CPZ trusted build. -->
 
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
