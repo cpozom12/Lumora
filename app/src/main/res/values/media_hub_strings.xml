@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="car_hub_title">CPZ Media Hub</string>
+    <string name="car_hub_installed">Installed on phone</string>
+    <string name="car_hub_not_installed">Not installed on phone</string>
+    <string name="car_hub_opening">Opening %1$s on phone</string>
+    <string name="car_hub_not_installed_named">%1$s is not installed on this phone</string>
+    <string name="car_hub_launch_blocked">Android did not allow %1$s to open from this car session</string>
+    <string name="car_hub_disclaimer">Use video services only while fully parked. CPZ Media Hub does not bypass Android Auto motion restrictions. Provider sign-in, DRM and playback stay inside each official service app.</string>
+</resources>
