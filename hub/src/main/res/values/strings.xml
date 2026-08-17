@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CPZ Media Hub</string>
+    <string name="hub_title">CPZ Media Hub</string>
+    <string name="hub_subtitle">Apps oficiales instaladas en este teléfono</string>
+    <string name="hub_note">Uso personal estacionado. El sistema decide dónde puede abrirse cada aplicación.</string>
+    <string name="status_installed">Instalada</string>
+    <string name="status_not_installed">No instalada</string>
+    <string name="launch_blocked">Android no permitió abrir %1$s desde esta superficie.</string>
+    <string name="launch_missing">%1$s no está instalada.</string>
+
+    <string name="provider_movistar">Movistar TV App</string>
+    <string name="provider_netflix">Netflix</string>
+    <string name="provider_disney">Disney+</string>
+    <string name="provider_youtube">YouTube</string>
+    <string name="provider_prime_video">Prime Video</string>
+    <string name="provider_max">HBO Max</string>
+</resources>
