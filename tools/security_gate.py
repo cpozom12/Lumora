@@ -24,9 +24,6 @@ EXPECTED_MEDIA_PACKAGES = (
     'com.wbd.stream',
 )
 
-# These hosts belonged to the inherited public-site scraper/extractor stack. Source compatibility
-# code may still exist temporarily while the upstream UI is untangled, but none of it is allowed
-# to survive R8 into the CPZ trusted APK.
 FORBIDDEN_SCRAPER_MARKERS = (
     b'aniworld.to', b'anime-world.in', b'dood.pm', b'dood.re', b'doodstream.com',
     b'mixdrop.top', b'mixdrop.ag', b'megacloud.blog', b'serienstream.to', b'cineby.app',
@@ -39,6 +36,8 @@ FORBIDDEN_SCRAPER_MARKERS = (
 )
 
 FORBIDDEN_HUB_PERMISSIONS = (
+    'android.permission.INTERNET',
+    'android.permission.ACCESS_NETWORK_STATE',
     'android.permission.REQUEST_INSTALL_PACKAGES',
     'android.permission.QUERY_ALL_PACKAGES',
     'android.permission.ACCESS_FINE_LOCATION',
@@ -56,6 +55,20 @@ FORBIDDEN_HUB_PERMISSIONS = (
     'android.permission.FOREGROUND_SERVICE',
     'android.permission.ACCESS_WIFI_STATE',
     'android.permission.CHANGE_WIFI_MULTICAST_STATE',
+)
+
+# These markers are stronger than the original hardening facade checks. The personal Hub V1 is a
+# local allow-listed launcher, so legacy playback/plugin/torrent entry points must not survive R8
+# into the shipped APK at all, even when their source facades remain fail-closed for compilation.
+FORBIDDEN_LEGACY_APK_MARKERS = (
+    b'Lcom/lumora/MainActivity;',
+    b'resolveTorrentStream',
+    b'wirePluginsPane',
+    b'Lcom/lumora/torrent/TorrentEngine;',
+    b'Lcom/lumora/plugin/js/JsPluginEngine;',
+    b'github.com/disclosurez/Lumora',
+    b'discord.gg/lumora',
+    b'example.com/plugins/index.json',
 )
 
 
@@ -92,6 +105,7 @@ def check_source() -> None:
     network = read('app/src/main/java/com/lumora/scraper/utils/NetworkClient.kt')
     provider_registry = read('app/src/main/java/com/lumora/hub/ExternalMediaProvider.kt')
     provider_launcher = read('app/src/main/java/com/lumora/hub/ExternalProviderLauncher.kt')
+    hub_activity = read('app/src/main/java/com/lumora/hub/HubActivity.kt')
 
     require(f'applicationId = "{EXPECTED_APPLICATION_ID}"' in gradle,
             f'applicationId must remain {EXPECTED_APPLICATION_ID}')
@@ -107,42 +121,47 @@ def check_source() -> None:
             'Android backup must remain disabled')
     require('android:usesCleartextTraffic="false"' in manifest,
             'personal Hub must reject cleartext HTTP traffic')
-    require('.torrent.TorrentForegroundService' not in manifest,
-            'torrent foreground service must not be registered')
-    require('.reminder.ReminderBootReceiver' not in manifest,
-            'boot receiver must not be registered in personal Hub V1')
-    require('.recording.RecordingRestoreReceiver' not in manifest,
-            'recording boot receiver must not be registered in personal Hub V1')
+    require('android:name=".hub.HubActivity"' in manifest,
+            'HubActivity must remain the exported personal-Hub entry surface')
+    require('android.intent.category.CAR_LAUNCHER' in manifest,
+            'parked personal-Hub CAR_LAUNCHER entry must remain declared')
+    for legacy_component in (
+        'android:name=".MainActivity"',
+        'android:name=".BaseApplication"',
+        'androidx.core.content.FileProvider',
+        'androidx.work.WorkManagerInitializer',
+        'com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME',
+        'androidx.car.app.CarAppService',
+        '.torrent.TorrentForegroundService',
+        '.reminder.ReminderBootReceiver',
+        '.recording.RecordingRestoreReceiver',
+    ):
+        require(legacy_component not in manifest,
+                f'legacy component must not be registered in personal Hub V1: {legacy_component}')
 
     require('suspend fun checkForUpdate(): UpdateInfo? = null' in updater,
             'in-app updater must remain fail-closed')
     require('fun installApk' in installer and '= false' in installer,
             'APK installer facade must remain disabled')
-
     require('Executable plugins are disabled in the CPZ hardened build' in plugin_engine,
             'executable plugin engine must remain disabled')
     require('fun storeUrls(): List<PluginStore> = emptyList()' in plugin_store,
             'remote plugin stores must remain disabled')
-
     require('Torrent/P2P playback is disabled in the CPZ hardened build' in torrent,
             'torrent/P2P engine must remain disabled')
     require('LAN credential pairing is disabled in the hardened build' in pairing,
             'credential-bearing LAN pairing must remain disabled')
     require('suspend fun exportTo' in backup and ': Boolean = false' in backup,
             'plaintext manual backup/export must remain disabled')
-
     require('SecureValueStore' in iptv_store,
             'IPTV provider secrets must use SecureValueStore')
     require('SecureValueStore' in media_store,
             'media-server secrets must use SecureValueStore')
-
     require('hostnameVerifier' not in network,
             'custom hostnameVerifier must not be reintroduced')
     require('trustAll: OkHttpClient get() = default' in network,
             'legacy trustAll alias must remain validating')
 
-    # Media Hub handoffs are a static reviewed allow-list. No broad package discovery, remote
-    # catalogue or attempt to use CarContext.startCarApp to force another app onto the car screen.
     for package_name in EXPECTED_MEDIA_PACKAGES:
         require(package_name in provider_registry,
                 f'reviewed media package missing from registry: {package_name}')
@@ -154,13 +173,16 @@ def check_source() -> None:
             'external provider launcher must not force third-party car-app launches')
     require('catch (t: Throwable)' not in provider_launcher,
             'external provider launcher must not swallow arbitrary fatal errors')
+    require('ExternalMediaProviderRegistry.providers' in hub_activity,
+            'HubActivity must render only the reviewed static provider registry')
 
 
 def check_apk(apk: Path) -> None:
     require(apk.is_file(), f'APK not found: {apk}')
 
-    forbidden_native = ('torrent', 'quickjs')
     forbidden_dex_markers = (
+        b'android.permission.INTERNET',
+        b'android.permission.ACCESS_NETWORK_STATE',
         b'android.permission.REQUEST_INSTALL_PACKAGES',
         b'android.permission.QUERY_ALL_PACKAGES',
         b'api.github.com/repos/disclosurez/Lumora/releases',
@@ -173,16 +195,13 @@ def check_apk(apk: Path) -> None:
         b'DexClassLoader',
         b'/system/bin/su',
         b'Magisk',
-    ) + FORBIDDEN_SCRAPER_MARKERS
+    ) + FORBIDDEN_SCRAPER_MARKERS + FORBIDDEN_LEGACY_APK_MARKERS
 
     with zipfile.ZipFile(apk) as zf:
         names = zf.namelist()
         native = [n for n in names if n.startswith('lib/') and n.endswith('.so')]
-        for name in native:
-            lowered = name.lower()
-            for marker in forbidden_native:
-                require(marker not in lowered,
-                        f'forbidden native payload shipped in APK: {name}')
+        require(not native,
+                f'personal Hub APK must contain no native .so payloads: {native}')
 
         dex_names = [n for n in names if n.endswith('.dex')]
         require(dex_names, 'APK contains no DEX files')
