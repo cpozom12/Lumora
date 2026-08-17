@@ -80,6 +80,23 @@ jobs:
       - name: Run differential lint
         working-directory: candidate
         run: ./gradlew :app:lintDebug --no-daemon
+      - name: Print lint report on failure
+        if: failure()
+        working-directory: candidate
+        run: |
+          if [ -f app/build/reports/lint-results-debug.txt ]; then
+            cat app/build/reports/lint-results-debug.txt
+          else
+            echo 'lint-results-debug.txt not found; available reports:'
+            find app/build/reports -maxdepth 2 -type f -print 2>/dev/null || true
+          fi
+      - name: Upload lint diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lint-diagnostics
+          path: candidate/app/build/reports/lint-results-debug.*
+          if-no-files-found: warn
 
   build:
     needs: validate-wrapper
@@ -138,3 +155,12 @@ jobs:
           cache: 'gradle'
       - name: Run tests
         run: ./gradlew test --no-daemon
+      - name: Upload test diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-diagnostics
+          path: |
+            app/build/reports/tests/**
+            app/build/test-results/**
+          if-no-files-found: warn
