@@ -1,13 +1,16 @@
 package com.lumora.reminder
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.lumora.MainActivity
 import com.lumora.R
 import com.lumora.cache.ProgramReminder
@@ -27,6 +30,13 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
     }
 
     private fun showNotification(context: Context, channelId: String, channelName: String, programTitle: String) {
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
         ensureChannel(context)
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
