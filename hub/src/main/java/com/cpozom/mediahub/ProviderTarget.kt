@@ -1,9 +1,7 @@
 package com.cpozom.mediahub
 
-import androidx.annotation.StringRes
-
 internal data class ProviderTarget(
-    @StringRes val labelRes: Int,
+    val labelRes: Int,
     val packageName: String,
 )
 
