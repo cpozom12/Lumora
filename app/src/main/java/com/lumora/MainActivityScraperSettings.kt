@@ -16,7 +16,7 @@ internal fun MainActivity.wireScraperSettingsPane(root: View) {
     host.removeAllViews()
     host.addView(
         TextView(this).apply {
-            text = "Web-site scrapers are disabled in the CPZ trusted build"
+            text = getString(R.string.cpz_scraper_settings_disabled)
             setTextColor(getColor(R.color.text_secondary))
             setPadding(
                 resources.getDimensionPixelSize(R.dimen.settings_gap_l),
