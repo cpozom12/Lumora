@@ -22,7 +22,7 @@ internal fun MainActivity.showScraperSourceDialog(
     @Suppress("UNUSED_PARAMETER") season: Int? = null,
     @Suppress("UNUSED_PARAMETER") episode: Int? = null,
 ) {
-    scraperToast("Inherited web-scraper playback is disabled in the CPZ trusted build")
+    scraperToast(getString(R.string.cpz_scraper_playback_disabled))
 }
 
 /** Remote scraper-site manifests are never loaded in the trusted build. */
