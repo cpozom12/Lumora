@@ -1,28 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
-    <!-- Personal Media Hub V1 keeps a deliberately small permission surface. INTERNET and
-         network-state remain for inherited trusted HTTPS media/server paths; provider handoff
-         itself does not receive provider credentials or content. -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- Android Auto Car App Library surface permissions. -->
-    <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
-    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
-
-    <!-- Intentionally absent from the personal Hub build: location, camera, microphone, SMS,
-         contacts, storage, install-packages, query-all-packages, boot, notification, foreground
-         service and multicast permissions. -->
+    <!--
+        Personal Media Hub V1 is a local launcher only. It does not contact provider servers,
+        receive provider credentials, download media, or execute remote code. The selected
+        official provider app owns its own network/authentication/DRM surface after handoff.
+    -->
 
     <queries>
-        <!-- Reviewed CPZ Media Hub handoff targets. Package visibility is explicit rather than
-             broad QUERY_ALL_PACKAGES access. -->
+        <!-- Explicit reviewed allow-list; QUERY_ALL_PACKAGES is intentionally absent. -->
         <package android:name="pe.movistar.go" />
         <package android:name="com.netflix.mediaclient" />
         <package android:name="com.disney.disneyplus" />
@@ -32,80 +22,32 @@
     </queries>
 
     <application
-        android:name=".BaseApplication"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:banner="@mipmap/banner_tv"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/cpz_app_name"
-        android:localeConfig="@xml/locales_config"
         android:appCategory="game"
-        android:largeHeap="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Lumora"
         android:usesCleartextTraffic="false">
 
+        <!--
+            Single exported entry surface for the personal build. On phone it is the ordinary
+            launcher activity; on the experimental parked Android Auto path it is the CAR_LAUNCHER
+            activity. No inherited IPTV/player/settings activity is exported or registered.
+        -->
         <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
-            android:resizeableActivity="true"
-            android:supportsPictureInPicture="true"
-            android:windowSoftInputMode="adjustResize">
+            android:name=".hub.HubActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.CAR_LAUNCHER" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
         </activity>
 
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
-        <!-- Reminder/recording receivers are intentionally not registered in personal Hub V1.
-             The underlying compatibility code may remain until the inherited phone UI is pruned. -->
-
-        <meta-data
-            android:name="androidx.car.app.minCarApiLevel"
-            android:value="1" />
-
-        <service
-            android:name=".auto.LumoraCarAppService"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher"
-            android:label="@string/cpz_app_name">
-            <intent-filter>
-                <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.POI" />
-            </intent-filter>
-        </service>
-
-        <meta-data
-            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="com.lumora.player.CastOptionsProvider" />
-
-        <provider
-            android:name="androidx.startup.InitializationProvider"
-            android:authorities="${applicationId}.androidx-startup"
-            android:exported="false"
-            tools:node="merge">
-            <meta-data
-                android:name="androidx.work.WorkManagerInitializer"
-                android:value="androidx.startup" />
-        </provider>
     </application>
 </manifest>
