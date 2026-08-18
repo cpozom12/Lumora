@@ -14,13 +14,17 @@ Independent Android application owned by CPZ. Version 1.0.0.
 
 ## Android Auto
 
-The manifest declares `CAR_LAUNCHER` so Android can evaluate the app for parked surfaces. It does not declare a false game or video category and does not bypass host restrictions. Android Auto decides whether the activity is eligible and automatically controls parked/moving availability.
+The manifest declares `CAR_LAUNCHER` so Android can evaluate the app for parked surfaces. It does not declare a false game or video category and does not bypass host restrictions. Android Auto decides whether the activity is eligible and controls parked/moving availability.
 
 ## Permanent signing
 
-The permanent signing key must be generated and retained only on a trusted local machine. Do not upload the keystore or `signing.properties` to source control, chat, CI artifacts or cloud storage unless an independently secured signing system is intentionally configured.
+The permanent signing key must be generated and retained only on a trusted local machine. Do not upload the keystore or its password to source control, chat, CI artifacts or cloud storage unless an independently secured signing system is intentionally configured.
 
-When `signing.properties` exists locally, the release build uses that stable key. Without it, Gradle can build an unsigned release artifact for audit but that artifact is not the permanent installable release.
+Run `build-permanent-release.ps1` on the trusted Windows development machine. If the keystore does not exist, the script invokes `keytool` locally. It then asks for the passwords through secure prompts, exposes them only as temporary environment variables to the Gradle process, builds the signed non-debuggable release and clears the signing environment afterwards.
+
+The `.jks` file is excluded by `.gitignore`. Future updates MUST use the same keystore and alias. Losing that key means Android will not accept future APKs as updates to the installed app.
+
+CI deliberately builds only an unsigned release for reproducible binary auditing. CI never receives the permanent signing key.
 
 ## Third-party names
 
