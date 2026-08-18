@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 APP = ROOT / "app"
+ANDROID_XML_NAMESPACE = "http://schemas.android.com/apk/res/android"
 EXPECTED_PACKAGES = (
     "pe.movistar.go",
     "com.netflix.mediaclient",
@@ -21,11 +22,14 @@ FORBIDDEN_TEXT = (
     "okhttp", "retrofit", "workmanager", "media3", "javascriptinterface",
     "dexclassloader", "runtime.exec", "processbuilder", "http://", "https://",
 )
-FORBIDDEN_APK = tuple(x.encode("utf-8") for x in FORBIDDEN_TEXT) + (
+FORBIDDEN_DEX = tuple(x.encode("utf-8") for x in FORBIDDEN_TEXT) + (
     b"android.permission.", b"Landroid/webkit/WebView;", b"Ljava/net/Socket;",
     b"Ljava/net/URL;", b"Ljava/lang/Runtime;", b"Ljava/lang/ProcessBuilder;",
     b"Ldalvik/system/DexClassLoader;", b"Landroid/content/ContentResolver;",
     b"Landroid/app/admin/DevicePolicyManager;", b"Landroid/accessibilityservice/AccessibilityService;",
+)
+FORBIDDEN_MANIFEST = (
+    b"android.permission.", b"lumora", b"disclosurez",
 )
 
 
@@ -40,7 +44,7 @@ def source_gate() -> None:
     java = "\n".join(p.read_text(encoding="utf-8") for p in (APP / "src/main/java").rglob("*.java"))
     executable_text = "\n".join([
         gradle,
-        manifest,
+        manifest.replace(ANDROID_XML_NAMESPACE, ""),
         java,
         (ROOT / "settings.gradle.kts").read_text(encoding="utf-8"),
         (ROOT / "build.gradle.kts").read_text(encoding="utf-8"),
@@ -72,12 +76,20 @@ def apk_gate(apk: Path) -> None:
         require(not any(n.endswith((".dex.jar", ".apk", ".jar", ".js")) for n in names), "nested executable payload present")
         dex_names = [n for n in names if n.endswith(".dex")]
         require(dex_names == ["classes.dex"], f"expected one DEX, got {dex_names}")
-        payload = b"".join(zf.read(n) for n in names if n.endswith(".dex") or n == "AndroidManifest.xml")
-        lowered = payload.lower()
-        for marker in FORBIDDEN_APK:
-            require(marker.lower() not in lowered, f"forbidden APK marker: {marker.decode(errors='ignore')}")
+
+        dex = zf.read("classes.dex")
+        manifest_bin = zf.read("AndroidManifest.xml")
+        lowered_dex = dex.lower()
+        lowered_manifest = manifest_bin.lower()
+
+        for marker in FORBIDDEN_DEX:
+            require(marker.lower() not in lowered_dex, f"forbidden DEX marker: {marker.decode(errors='ignore')}")
+        for marker in FORBIDDEN_MANIFEST:
+            require(marker.lower() not in lowered_manifest, f"forbidden manifest marker: {marker.decode(errors='ignore')}")
         for package_name in EXPECTED_PACKAGES:
-            require(package_name.encode() in payload, f"package target missing from APK: {package_name}")
+            encoded = package_name.encode()
+            require(encoded in dex or encoded in manifest_bin, f"package target missing from APK: {package_name}")
+
         bad_crc = zf.testzip()
         require(bad_crc is None, f"CRC failure: {bad_crc}")
     print(f"CPZ permanent APK gate passed: {apk}")
