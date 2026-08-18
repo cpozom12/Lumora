@@ -1,15 +1,17 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
 }
 
-val signingPropertiesFile = rootProject.file("signing.properties")
-val signingProperties = Properties().apply {
-    if (signingPropertiesFile.exists()) {
-        signingPropertiesFile.inputStream().use { load(it) }
-    }
-}
+val releaseKeystore = System.getenv("CPZ_MEDIA_HUB_KEYSTORE")
+val releaseStorePassword = System.getenv("CPZ_MEDIA_HUB_STORE_PASSWORD")
+val releaseKeyAlias = System.getenv("CPZ_MEDIA_HUB_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("CPZ_MEDIA_HUB_KEY_PASSWORD")
+val hasLocalReleaseSigning = listOf(
+    releaseKeystore,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
 
 android {
     namespace = "com.cpozom.mediahub"
@@ -24,12 +26,12 @@ android {
     }
 
     signingConfigs {
-        if (signingPropertiesFile.exists()) {
+        if (hasLocalReleaseSigning) {
             create("release") {
-                storeFile = rootProject.file(signingProperties.getProperty("storeFile"))
-                storePassword = signingProperties.getProperty("storePassword")
-                keyAlias = signingProperties.getProperty("keyAlias")
-                keyPassword = signingProperties.getProperty("keyPassword")
+                storeFile = file(releaseKeystore!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
@@ -51,7 +53,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (signingPropertiesFile.exists()) {
+            if (hasLocalReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
