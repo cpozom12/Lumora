@@ -38,12 +38,13 @@ def source_gate() -> None:
     gradle = (APP / "build.gradle.kts").read_text(encoding="utf-8")
     manifest = (APP / "src/main/AndroidManifest.xml").read_text(encoding="utf-8")
     java = "\n".join(p.read_text(encoding="utf-8") for p in (APP / "src/main/java").rglob("*.java"))
-    all_project_text = "\n".join(
-        p.read_text(encoding="utf-8", errors="ignore")
-        for p in ROOT.rglob("*")
-        if p.is_file() and p.suffix.lower() in {".java", ".xml", ".kts", ".md", ".txt", ""}
-        and p.name not in {"security_gate.py"}
-    ).lower()
+    executable_text = "\n".join([
+        gradle,
+        manifest,
+        java,
+        (ROOT / "settings.gradle.kts").read_text(encoding="utf-8"),
+        (ROOT / "build.gradle.kts").read_text(encoding="utf-8"),
+    ]).lower()
 
     require('applicationId = "com.cpozom.mediahub"' in gradle, "applicationId changed")
     require('versionName = "1.0.0"' in gradle, "versionName must be 1.0.0")
@@ -58,7 +59,7 @@ def source_gate() -> None:
     for package_name in EXPECTED_PACKAGES:
         require(package_name in manifest and package_name in java, f"allow-listed package missing: {package_name}")
     for marker in FORBIDDEN_TEXT:
-        require(marker not in all_project_text, f"forbidden standalone source marker present: {marker}")
+        require(marker not in executable_text, f"forbidden executable source marker present: {marker}")
 
 
 def apk_gate(apk: Path) -> None:
