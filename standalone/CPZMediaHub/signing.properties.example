@@ -1,6 +1,0 @@
-# Copy to signing.properties ONLY on the trusted local signing machine.
-# Never commit signing.properties or the keystore.
-storeFile=cpz-media-hub-release.jks
-storePassword=CHANGE_ME_LOCALLY
-keyAlias=cpz-media-hub
-keyPassword=CHANGE_ME_LOCALLY
