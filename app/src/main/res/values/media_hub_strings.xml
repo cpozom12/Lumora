@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Personal V1 strings are intentionally fixed-language until the public localization pass. -->
+    <string name="cpz_app_name" translatable="false">CPZ Media Hub</string>
+    <string name="car_hub_title" translatable="false">CPZ Media Hub</string>
+    <string name="car_hub_installed" translatable="false">Installed on phone</string>
+    <string name="car_hub_not_installed" translatable="false">Not installed on phone</string>
+    <string name="car_hub_opening" translatable="false">Opening %1$s on phone</string>
+    <string name="car_hub_not_installed_named" translatable="false">%1$s is not installed on this phone</string>
+    <string name="car_hub_launch_blocked" translatable="false">Android did not allow %1$s to open from this car session</string>
+    <string name="car_hub_disclaimer" translatable="false">Use video services only while fully parked. CPZ Media Hub does not bypass Android Auto motion restrictions. Provider sign-in, DRM and playback stay inside each official service app.</string>
+    <string name="cpz_scraper_playback_disabled" translatable="false">Inherited web-scraper playback is disabled in the CPZ trusted build</string>
+    <string name="cpz_scraper_settings_disabled" translatable="false">Web-site scrapers are disabled in the CPZ trusted build</string>
+</resources>

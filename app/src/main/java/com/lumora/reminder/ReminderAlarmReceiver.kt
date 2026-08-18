@@ -1,20 +1,18 @@
 package com.lumora.reminder
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import com.lumora.MainActivity
-import com.lumora.R
 import com.lumora.cache.ProgramReminder
 import com.lumora.cache.ReminderStore
 
-const val REMINDER_NOTIFICATION_CHANNEL_ID = "program_reminders"
-
+/**
+ * Compatibility receiver retained while the inherited reminder code is being pruned.
+ *
+ * Personal Media Hub V1 intentionally has no notification permission and does not register
+ * reminder/recording receivers in the manifest. If an already-created PendingIntent reaches this
+ * class during an upgrade, only clean the stale reminder state; never post a notification.
+ */
 class ReminderAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val channelId = intent.getStringExtra(EXTRA_CHANNEL_ID) ?: return
@@ -22,44 +20,9 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
         val programTitle = intent.getStringExtra(EXTRA_PROGRAM_TITLE) ?: ""
         val startTimestamp = intent.getLongExtra(EXTRA_START_TIMESTAMP, 0L)
 
-        ReminderStore.remove(context, ProgramReminder(channelId, channelName, programTitle, startTimestamp).key)
-        showNotification(context, channelId, channelName, programTitle)
-    }
-
-    private fun showNotification(context: Context, channelId: String, channelName: String, programTitle: String) {
-        ensureChannel(context)
-
-        val openIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("open_channel_id", channelId)
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            context, channelId.hashCode(), openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        ReminderStore.remove(
+            context,
+            ProgramReminder(channelId, channelName, programTitle, startTimestamp).key
         )
-
-        val notification = NotificationCompat.Builder(context, REMINDER_NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(programTitle.ifBlank { context.getString(R.string.ui_reminder_starting_soon) })
-            .setContentText(context.getString(R.string.ui_reminder_starts_soon, channelName))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .build()
-
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        runCatching { manager.notify(channelId.hashCode(), notification) }
-    }
-
-    private fun ensureChannel(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (manager.getNotificationChannel(REMINDER_NOTIFICATION_CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            REMINDER_NOTIFICATION_CHANNEL_ID,
-            context.getString(R.string.ui_reminder_channel_name),
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply { description = context.getString(R.string.ui_reminder_channel_desc) }
-        manager.createNotificationChannel(channel)
     }
 }

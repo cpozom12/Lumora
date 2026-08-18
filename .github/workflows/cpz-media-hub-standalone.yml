@@ -1,0 +1,56 @@
+name: CPZ Media Hub Standalone
+
+on:
+  pull_request:
+    branches: [ agent/security-hardening ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpz-media-hub-standalone-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  permanent-source-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Audit standalone source
+        run: python3 standalone/CPZMediaHub/security_gate.py
+
+  permanent-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          java-version: '17'
+          distribution: temurin
+      - name: Lint permanent project
+        run: ./gradlew -p standalone/CPZMediaHub :app:lintRelease --no-daemon
+
+  permanent-release-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          java-version: '17'
+          distribution: temurin
+      - name: Build unsigned release for binary audit
+        run: ./gradlew -p standalone/CPZMediaHub :app:assembleRelease --no-daemon
+      - name: Audit permanent release APK
+        run: python3 standalone/CPZMediaHub/security_gate.py --apk standalone/CPZMediaHub/app/build/outputs/apk/release/app-release-unsigned.apk
+      - name: Upload unsigned audited release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cpz-media-hub-1.0.0-unsigned-audited
+          path: standalone/CPZMediaHub/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error

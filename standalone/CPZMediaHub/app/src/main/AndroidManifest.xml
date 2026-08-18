@@ -5,14 +5,8 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
-    <!--
-        Personal Media Hub V1 is a local launcher only. It does not contact provider servers,
-        receive provider credentials, download media, or execute remote code. The selected
-        official provider app owns its own network/authentication/DRM surface after handoff.
-    -->
-
+    <!-- Intentionally no uses-permission declarations. -->
     <queries>
-        <!-- Explicit reviewed allow-list; QUERY_ALL_PACKAGES is intentionally absent. -->
         <package android:name="pe.movistar.go" />
         <package android:name="com.netflix.mediaclient" />
         <package android:name="com.disney.disneyplus" />
@@ -24,30 +18,24 @@
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/cpz_app_name"
-        android:appCategory="game"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:icon="@drawable/ic_cpz_media_hub"
+        android:roundIcon="@drawable/ic_cpz_media_hub"
+        android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Lumora"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
 
-        <!--
-            Single exported entry surface for the personal build. On phone it is the ordinary
-            launcher activity; on the experimental parked Android Auto path it is the CAR_LAUNCHER
-            activity. No inherited IPTV/player/settings activity is exported or registered.
-        -->
         <activity
-            android:name=".hub.HubActivity"
-            android:exported="true">
+            android:name=".HubActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <!-- Harmless opt-in for parked Android Auto surfaces. No fake game/video category. -->
                 <category android:name="android.intent.category.CAR_LAUNCHER" />
             </intent-filter>
         </activity>
-
     </application>
 </manifest>
