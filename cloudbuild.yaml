@@ -1,0 +1,24 @@
+# CI de Lumora.
+# Equivale a .github/workflows/ci.yml: lint, assembleDebug y test.
+# Proyecto GCP: mirror-finanzas.
+# No firma y no lee secretos. Sin trigger: no gasta hasta que se conecte.
+# El upload-artifact de Actions no se replica: no es un test.
+# release.yml (APK firmado y GitHub Release) sigue solo en workflow_dispatch:
+# usa secrets de firma y no se copió aquí.
+timeout: 3600s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - id: lint-debug-test
+    name: ghcr.io/cirruslabs/android-sdk:36@sha256:f9b3ea9ed2b5fc9522adae82c7b4622ab7aa54207ef532c8e615a347dca08f31
+    entrypoint: bash
+    env:
+      - GRADLE_USER_HOME=/workspace/.gradle-cache
+    args:
+      - -ceu
+      - |
+        set -euo pipefail
+        chmod +x ./gradlew
+        ./gradlew lint :app:assembleDebug test --no-daemon --continue
