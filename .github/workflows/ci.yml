@@ -1,10 +1,9 @@
 name: CI
 
+# 2026-10-08: se quitaron push y pull_request (minutos de Actions agotados).
+# El mismo test está en Cloud Build. workflow_dispatch queda por si acaso.
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   lint:

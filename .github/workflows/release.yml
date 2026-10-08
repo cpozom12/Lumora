@@ -1,9 +1,9 @@
 name: Build APK
 
+# 2026-10-08: se quitó push, incluidos los tags v* (minutos de Actions agotados).
+# La firma y el GitHub Release usan secrets y no se copiaron a Cloud Build.
+# Los tests de ci.yml están en cloudbuild.yaml. Este job queda en workflow_dispatch.
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
